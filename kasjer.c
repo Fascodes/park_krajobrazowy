@@ -11,7 +11,7 @@ int main()
     printf("KASJER PID: %d\n", getpid());
     
     processClients(data);
-    //sem_wait(&data->mutex);
+    sem_wait(&data->mutex);
     sem_post(&data->working);
 
     return 0;

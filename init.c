@@ -2,9 +2,9 @@
 #include "myfun.h"
 #include <time.h>
 
-#define K 10
-#define P 10
 
+
+int intLength(int num);
 
 int main()
 {
@@ -28,26 +28,32 @@ int main()
     }
     sleep(1);
 
-    // for(int i=0;i<P;i++)
-    // {
-    //     pid_t pid = fork();
-    //     if(pid<0)
-    //     {
-    //         perror("FORK ERROR - init\n");
-    //         exit(1);
-    //     }
-    //     else if(pid == 0) // child process
-    //     {
-    //         if(execl("./przewodnik", "./przewodnik", (char*) NULL)==-1)
-    //         {
-    //             perror("EXEC ERROR - przewodnik\n");
-    //             exit(1);
-    //         } 
-    //     }
-    // }
-    // sleep(1);
 
-    for(int i=0;i<N;i++)
+    int P_length=intLength(P);
+    for(int i=0;i<P;i++)
+    {
+        pid_t pid = fork();
+        
+        if(pid<0)
+        {
+            perror("FORK ERROR - init\n");
+            exit(1);
+        }
+        else if(pid == 0) // child process
+        {
+            char przewNR[P_length+2]; // Enough space for "50\0"
+            snprintf(przewNR, sizeof(przewNR), "%d", i); // Convert age to string
+            if(execl("./przewodnik", "./przewodnik", przewNR,(char*) NULL)==-1)
+            {
+                perror("EXEC ERROR - przewodnik\n");
+                exit(1);
+            } 
+        }
+    }
+    sleep(1);
+    time_t current_time = time(NULL); // Starting time
+    time_t Tk = current_time + 20;    // Ending time after 60 seconds
+    for(int i=0;i<M && current_time<Tk;i++)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -69,10 +75,10 @@ int main()
             }
             
         }
-        sleep(1); 
+        sleep(1);
+        current_time=time(NULL); 
     }
 
-    //while() // tutaj semafor w przewodniku do zamkniecia parku
 
     key_t key = ftok("/tmp", 'C');  // Use a file and project identifier
     if (key == -1) {
@@ -93,14 +99,43 @@ int main()
         perror("cleanup");
         exit(1);
     }
-    for(int i=0; i<K;i++)
+    for(int i=0; i<P+K;i++)
     {
         sem_wait(&data->working); // Wait for each process to signal
-        //sem_post(&data->mutex);
+        sem_post(&data->mutex);
     }
     
     
     shmdt(data); // Detach memory
     shmctl(shmID, IPC_RMID, NULL); // Mark memory for deletion
+    msgctl(data->msqid, IPC_RMID, NULL);  // Remove the message queue
     printf("CLEANUP DONE by init\n");
+}
+
+
+
+
+
+
+
+int intLength(int num) {
+    int length = 0;
+
+    // Handle 0 as a special case
+    if (num == 0) {
+        return 1;
+    }
+
+    
+    if (num < 0) {
+        num = -num; 
+    }
+
+   
+    while (num > 0) {
+        num /= 10; 
+        length++;
+    }
+
+    return length;
 }

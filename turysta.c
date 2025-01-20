@@ -16,9 +16,34 @@ int main(int argc, char *argv[])
     CheckoutData* checkoutdata=checkoutSetupShm();
 
     enterqueue(checkoutdata, 1, mypid);
+    
+
+    struct message msg;  // Local message struct
+
+    // Receive message from the queue
+    if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), getpid(), 0) == -1) 
+    {
+        perror("msgrcv");
+        exit(1);
+    }
+
+    int mygroup = msg.value;
+    pid_t myprzew=checkoutdata->groups[mygroup][0];
+    
+    printf("    TURYSTA PID: %d   grupa: %d   przewodnik: %d\n", mypid, mygroup, myprzew);
+    msg.mtype=myprzew;
+    msg.pid=mypid;
+    msg.value=1;
+
+    if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), 0) == -1) 
+    {
+        perror("msgsnd - turysta => pzewodnik mygroup");
+        exit(1);
+    }
+
     //TourData* tourdata=tourSetupShm();
 
-    sleep(8);
+    sleep(3);
     printf("Koniec turysta: %d\n", mypid);
 
     return 0;
