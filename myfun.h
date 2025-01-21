@@ -26,7 +26,7 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
-#define N 30
+#define N 3
 #define VIP N/20
 #define M 10
 #define P 1
@@ -70,15 +70,17 @@ typedef struct {
 	int prom_queue1[N];
 	int prom_queue2[N];
 
-	int most_group[X1];
-	int wieza_group[X2];
-	int prom_group[X3];
+	int prom; //1,2 - zaleznie gdzie aktualnie jest prom, taka trasa mozna z niego korzystac
+	int initialized;
+	int msqid;
+	int mostCounter;
+	int mostSide;
 
+	
+	sem_t mostSpots;
+	sem_t wiezaSpots;
+	sem_t promSpots;
 
-	sem_t mutexMost;
-	sem_t mutexWieza;
-	sem_t mutexProm;
-    sem_t group_ready[P]; // Signal when a specific group is ready
 } TourData;
 
 
@@ -105,6 +107,11 @@ void processClients(CheckoutData* data); // kasjer function
 
 void przewodnikWaiting(CheckoutData* checkoutdata, int nr);
 
+void prom(TourData* data, int tourist_id, int group_id, int is_child, int is_parent, int children_count);
+
+void wieza(TourData* data, int tourist_id, int group_id, int is_child, int is_below_five, int is_parent, int children_count, pthread_t* children_tids);
+
+void most(TourData* data, int tourist_id, int trasa, int group_id, int is_child, int is_parent, int children_count, pthread_t* children_tids);
 // void waitingforgroup();
 
 // void startTour(); // for przewodnik

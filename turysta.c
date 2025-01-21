@@ -41,9 +41,8 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    //TourData* tourdata=tourSetupShm();
+    TourData* tourdata=tourSetupShm();
 
-    sleep(3);
     printf("Koniec turysta: %d\n", mypid);
 
     return 0;
