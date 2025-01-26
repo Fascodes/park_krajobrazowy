@@ -52,8 +52,8 @@ int main()
     }
     sleep(1);
     time_t current_time = time(NULL); // Starting time
-    time_t Tk = current_time + 20;    // Ending time after 60 seconds
-    for(int i=0;i<N && current_time<Tk;i++)
+    time_t Tk = current_time + 50;    // Ending time after 60 seconds
+    for(int i=0;i<40 && current_time<Tk;i++)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -65,7 +65,8 @@ int main()
         {
             srand(time(NULL));
             
-            int age = (rand() % 50) + 1; // Generate random age between 1 and 50
+            //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
+            int age = 0;
             char age_str[4]; // Enough space for "50\0"
             snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
             if(execl("./turysta", "./turysta", age_str,(char*) NULL)==-1)
@@ -75,7 +76,7 @@ int main()
             }
             
         }
-        sleep(1);
+        //sleep(1);
         current_time=time(NULL); 
     }
 
@@ -99,7 +100,7 @@ int main()
         perror("cleanup");
         exit(1);
     }
-    for(int i=0; i<P+K;i++)
+    for(int i=0; i<P+K-1;i++)
     {
         sem_wait(&data->working); // Wait for each process to signal
         sem_post(&data->mutex);

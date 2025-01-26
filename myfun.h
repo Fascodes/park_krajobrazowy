@@ -26,15 +26,17 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
-#define N 3
+#define N 30
 #define VIP N/20
 #define M 10
-#define P 1
+#define P 4
 #define K 10
 #define X1 7 // most
 #define X2 15 // wieza
 #define X3 12 // prom
-
+#define KASA1 1
+#define KASA2 2
+#define PROM 5
 
 // Shared memory structure
 typedef struct {
@@ -46,6 +48,7 @@ typedef struct {
 
 	int groups[P][M+1]; // Groups assigned to przewodnik, na pozycji 0 pid przewodnika
     int group_counts[P];      // Count of clients in each group
+	int group_children[P];
     int group_active[P];      // Status of each group (1 = active, 0 = inactive)
 	
 	int initialized;
@@ -73,13 +76,19 @@ typedef struct {
 	int prom; //1,2 - zaleznie gdzie aktualnie jest prom, taka trasa mozna z niego korzystac
 	int initialized;
 	int msqid;
-	int mostCounter;
+	int mostCounter1;
+	int mostCounter2;
 	int mostSide;
+	int mostWaiting1;
+	int mostWaiting2;
+	int promSide;
 
 	
-	sem_t mostSpots;
+	sem_t mostSpots1;
+	sem_t mostSpots2;
 	sem_t wiezaSpots;
-	sem_t promSpots;
+	sem_t promSpots1;
+	sem_t promSpots2;
 
 } TourData;
 
@@ -101,27 +110,19 @@ void enterqueue(CheckoutData* data,int qNumber, int tourist);
 
 int checkgroups(int people, CheckoutData* data);
 
-// int whatgroup(int clientID, CheckoutData* data);
-
 void processClients(CheckoutData* data); // kasjer function
 
 void przewodnikWaiting(CheckoutData* checkoutdata, int nr);
 
-void prom(TourData* data, int tourist_id, int group_id, int is_child, int is_parent, int children_count);
+void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa);
 
-void wieza(TourData* data, int tourist_id, int group_id, int is_child, int is_below_five, int is_parent, int children_count, pthread_t* children_tids);
+void wieza(TourData* data, int tourist_id, int group_id, int children_count);
 
-void most(TourData* data, int tourist_id, int trasa, int group_id, int is_child, int is_parent, int children_count, pthread_t* children_tids);
-// void waitingforgroup();
+void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) ;
+
+void waitingForGroup(CheckoutData* checkoutdata, int mygroup);
+
 
 // void startTour(); // for przewodnik
 
 // void endTour();
-
-// void nextSpot(); // for przewodnik
-
-// void wieza();
-
-// void most();
-
-// void prom();

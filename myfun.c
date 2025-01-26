@@ -35,9 +35,11 @@ CheckoutData *checkoutSetupShm()
         data->exit_tail=0;   // Head and tail for exiting queue
         data->enter_turn=1;
         data->initialized=1;
+            
         for(int i=0;i<P;i++)
         {
             data->group_counts[i]=0;
+            data->group_children[i]=0;
         };
 
 
@@ -95,13 +97,18 @@ TourData *tourSetupShm(){
         sem_init(&data->mostSpots1, 1, X1);
         sem_init(&data->mostSpots2, 1, X1);  
         sem_init(&data->wiezaSpots, 1, X2);  
-        sem_init(&data->promSpots, 1, X3);  
+        sem_init(&data->promSpots1, 1, X3);  
+        sem_init(&data->promSpots2, 1, X3);  
 
         
-        data->mostCounter=0;
+        data->mostCounter1=0;
+        data->mostCounter2=0;
         data->mostSide=1;
         data->prom=2; 
         data->initialized=1;
+        data->mostWaiting1=0;
+	    data->mostWaiting2=0;
+        data->promSide=1;
         printf("TOUR DATA Init finished by: %d\n",getpid());
     }
 
@@ -109,23 +116,40 @@ TourData *tourSetupShm(){
 }
 
 
-void enterqueue(CheckoutData* data,int qNumber, int tourist)
+void enterqueue(CheckoutData* data,int qNumber, int children)
 {
     //printf("ENTERQ, %d  ARG:%d\t", getpid(),tourist);
     sem_wait(&data->mutex);  // Lock access to shared resources
+    struct message msg;
+    
+    msg.pid=getpid();
+    msg.value=children;
     if(qNumber==1)
     {
-        data->enter_queue[data->enter_tail]=tourist;
-        data->enter_tail=(data->enter_tail+1)%N;
+        // data->enter_queue[data->enter_tail]=tourist;
+        // data->enter_tail=(data->enter_tail+1)%N;
+        msg.mtype=KASA1;
         sem_post(&data->enter_sem);
+        
+        if (msgsnd(data->msqid, &msg, sizeof(pid_t)+sizeof(int), 0) == -1) 
+        {
+            perror("msgsnd");
+            exit(1);
+        }
         //printf("ENTER SEM POSTED\n"); 
 
     }
     else if(qNumber==2)
     {
-        data->exit_queue[data->exit_tail]=tourist;
-        data->exit_tail=(data->exit_tail+1)%N;
+        // data->exit_queue[data->exit_tail]=tourist;
+        // data->exit_tail=(data->exit_tail+1)%N;
+        msg.mtype=KASA2;
         sem_post(&data->exit_sem);
+        if (msgsnd(data->msqid, &msg, sizeof(pid_t)+sizeof(int), 0) == -1) 
+        {
+            perror("msgsnd");
+            exit(1);
+        }
         
     }
     sem_post(&data->mutex);  // Unlock access to shared resources
@@ -165,7 +189,7 @@ int checkgroups(int people, CheckoutData* data)
     //printf("CHECKING GROUPS\n");
     for(int i=0; i<P;i++)
     {
-        if(data->group_active[i]==0 && data->group_counts[i] +people <= M+1) 
+        if(data->group_active[i]==0 && data->group_counts[i] + data->group_children[i] + people <= M+1) 
         {
             group=i;
             break;
@@ -179,7 +203,7 @@ int checkgroups(int people, CheckoutData* data)
 void processClients(CheckoutData* data) // kasjer function
 {
     time_t current_time = time(NULL); // Starting time
-    time_t Tk = current_time + 15;    // Ending time after 60 seconds
+    time_t Tk = current_time + 90;    // Ending time after 60 seconds
     struct message msg;
     while (1)
     {
@@ -199,93 +223,50 @@ void processClients(CheckoutData* data) // kasjer function
             
             if (sem_trywait(&data->enter_sem) == 0) 
             {
-                int clientID = leavequeue(data, 1); // Process entering kasa
-                if(clientID==-1)
-                {
-                    fprintf(stderr, "Nie mozna znalezc klienta w kolejce");
-                    data->enter_turn = 0;
-                    continue;
-                }
-
-                // Send acknowledgment to the client
-                msg.mtype = clientID;
-                msg.pid = getpid(); // Cashier's PID
-                msg.value = 0; // Message value indicating acknowledgment
-                if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) 
-                {
-                    perror("msgsnd - kasjer to turysta");
-                    exit(1);
-                }
 
                 // Receive clients details
-                if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), clientID, 0) == -1) 
+                if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), KASA1, 0) == -1) 
                 {
                     perror("msgrcv - kasjer receiving client details");
                     exit(1);
                 }
 
-                int is_parent = msg.value; // Check if the client is a parent
-                int children_count = 0;
+                int people = msg.value + 1;
+                int clientID=msg.pid;
 
-                if (is_parent)
-                {
-                    // Receive the number of children
-                    if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), clientID, 0) == -1) 
-                    {
-                        perror("msgrcv - kasjer receiving children count");
-                        exit(1);
-                    }
-                    children_count = msg.value;
-                    printf("Processing parent client %d with %d children.\n", clientID, children_count);
-                }
-
-                int total_size = 1 + children_count; // Parent + children
 
                 // Check for available group
-                int group = checkgroups(total_size, data);
+                int group = checkgroups(people, data);
                 while (group == -1 && current_time < Tk)
                 {
                     printf("No available group for client %d. Waiting for group availability.\n", clientID);
                     sem_post(&data->mutex); // Unlock while waiting
                     sleep(1);
                     sem_wait(&data->mutex); // Reacquire lock
-                    group = checkgroups(total_size, data);
+                    group = checkgroups(people, data);
                     current_time = time(NULL);
                 }
 
-                if (group != -1)
+                if(group!=-1)
                 {
-                    printf("Assigning client %d and family to group %d.\n", clientID, group);
-
-                    // Wait for individual IDs from the parent and children
-                    for (int i = 0; i < total_size; i++)
+                    data->groups[group][data->group_counts[group]]=clientID;
+                    data->group_counts[group]++;
+                    for(int i=0;i<people-1;i++)
                     {
-                        if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), getpid(), 0) == -1)
-                        {
-                            perror("msgrcv - kasjer waiting for IDs");
-                            exit(1);
-                        }
-                        int personID = msg.value; // ID from the parent or child
-                        data->groups[group][data->group_counts[group]] = personID;
-                        data->group_counts[group]++;
-
-                        printf("Added person %d to group %d.\n", personID, group);
+                        data->group_children[group]++;
                     }
-
-                    // Notify the parent about the assigned group
-                    msg.mtype = clientID;
-                    msg.value = group;
-                    if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) 
+                    struct message msg;
+                    msg.mtype=clientID;
+                    msg.value=group;
+                    if (msgsnd(data->msqid, &msg, sizeof(pid_t)+sizeof(int), 0) == -1) 
                     {
-                        perror("msgsnd - kasjer to parent");
+                        perror("msgsnd");
                         exit(1);
                     }
-
-                    printf("Assigned client %d and their family to group %d.\n", clientID, group);
                 }
                 else
                 {
-                    printf("No groups available for client %d and their family.\n", clientID);
+                    printf("There were no available groups for %d\n", clientID);
                 }
             }
             data->enter_turn = 0;
@@ -294,7 +275,12 @@ void processClients(CheckoutData* data) // kasjer function
         {
             if (sem_trywait(&data->exit_sem) == 0) 
             {
-                int clientID = leavequeue(data, 2); // Process exiting queue
+                if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), KASA2, 0) == -1) 
+                {
+                    perror("msgrcv - kasjer receiving client details");
+                    exit(1);
+                }
+                int clientID = msg.pid; // Process exiting queue
                 printf("Processed exiting client %d\n", clientID);
             }
             data->enter_turn = 1;
@@ -308,236 +294,232 @@ void processClients(CheckoutData* data) // kasjer function
 
 void przewodnikWaiting(CheckoutData* checkoutdata, int nr)
 {
-    sem_wait(&checkoutdata->mutex);
+    //sem_wait(&checkoutdata->mutex);
     checkoutdata->group_active[nr]=0;
     checkoutdata->groups[nr][0]=getpid();
     checkoutdata->group_counts[nr]=1;
-    sem_post(&checkoutdata->mutex);
+    //sem_post(&checkoutdata->mutex);
 
-    struct message msg;  // Local message struct
+    //struct message msg;  // Local message struct
 
     // Wait here for full group or assign time limit
-    int counter=0;
     printf("\t  PRZEWODNIK %d CZEKA NA GRUPE\n", getpid());
-    while(counter<M)
-    {
-        if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), getpid(), 0) == -1) 
-        {
-            perror("msgrcv - przewodnik");
+    while(checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1);
+    printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
+    checkoutdata->group_active[nr]=1;
+}
+
+void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
+    struct message msg;
+    int messagesReceived = 0;
+
+    printf("Przewodnik %d is waiting for group %d to finish activities.\n", getpid(), mygroup);
+
+    // Wait for all tourists in the group to notify the przewodnik
+    while (messagesReceived < checkoutdata->group_counts[mygroup]-1) {
+        // Wait for a message from a turysta in the group
+        if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), getpid(), 0) == -1) {
+            perror("msgrcv - przewodnik waiting for group");
             exit(1);
         }
-        printf("Przewodnik received a message from turysta      %d\n", msg.pid);
-        counter++;
-    };
-    printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami\n",getpid(),counter);
+        messagesReceived++;
+        //printf("\t\tMESSAGES RECEIVED: %d\n", messagesReceived);
+        //printf("\t\tGROUP COUNT %d: %d\n",mygroup, checkoutdata->group_counts[mygroup]);
+    }
+
+    printf("Przewodnik %d has received all messages from group %d. Simulating travel to destination...\n", getpid(), mygroup);
+
+    // Simulate travel with a delay
+    sleep(rand() % 5 + 1); // Replace 3 with the desired delay in seconds
+
+    // Notify the group that they have arrived
+    // Group-specific message type for arrival notification
+
+    for(int i=0;i<checkoutdata->group_counts[mygroup]-1;i++)
+    {
+        msg.mtype = checkoutdata->groups[mygroup][i+1];
+        if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
+        perror("msgsnd - przewodnik notifying group arrival");
+        exit(1);
+    }
+    }
+
+    
+
+    printf("Przewodnik %d notified group %d of their arrival.\n", getpid(), mygroup);
 }
 
 
-void most(TourData* data, int tourist_id, int trasa, int group_id, int is_child, int is_parent, int children_count, pthread_t* children_tids) 
+
+void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) 
 {
+    
 
-    sem_wait(&data->mostSpots);  // Every process waits for their turn
+    int mostTime = rand() % 5 + 1;; // Default crossing time for the spot
 
-    int mostTime = 1; // Default crossing time for the spot
 
-    if (is_parent) {
-        printf("Parent tourist %d from group %d is waiting for %d children to take their spots on the bridge.\n",tourist_id, group_id, children_count);
-
-        // Wait for messages from all children
-        for (int i = 0; i < children_count; i++) {
-            struct message msg;
-            if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), getpid(), 0) == -1) {
-                perror("msgrcv - parent from child");
-                exit(1);
-            }
-            printf("Parent received message from child for group %d.\n", group_id);
-        }
-
-        printf("All children of parent tourist %d from group %d have taken their spots on the bridge.\n",
-               tourist_id, group_id);
-
-        mostTime = 3; // Set family crossing time for the spot
-
-        // Send the crossing time to each child
-        for (int i = 0; i < children_count; i++) {
-            struct message msg;
-            msg.mtype = children_tids[i];  // Use each child thread's TID
-            msg.pid = 0;
-            msg.data = mostTime;  // Include the time
-            if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
-                perror("msgsnd - parent to child");
-                exit(1);
-            }
-            printf("Parent sent crossing time to child %lu in group %d.\n", (unsigned long)children_tids[i], group_id);
-        }
-        
-    } else if (is_child) {
-        // Send readiness message to the parent
-        struct message msg;  // Set mtype to the parent's PID
-        msg.mtype = getppid();
-        msg.pid = 0;
-        if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
-            perror("msgsnd - child to parent");
-            exit(1);
-        }
-        printf("Child tourist %d from group %d sent readiness message.\n", tourist_id, group_id);
-
-        // Receive the crossing time from the parent
-        if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), pthread_self(), 0) == -1) {
-            perror("msgrcv - child from parent");
-            exit(1);
-        }
-        mostTime = msg.data;  // Use the received crossing time
-
-    } 
-    // Cross the bridge
     if(trasa==1)
     {
-        if(data->mostSide==1)
+        for (int i = 0; i < children_count+1; i++) 
         {
-            printf("Tourist %d from group %d is crossing the bridge. %s\n",tourist_id, group_id, is_child ? "Child" : "Adult");
-            data->mostCounter++;
-            sleep(mostTime);  // Use the calculated family time for consistency
-            data->mostCounter--;
-            printf("Tourist %d from group %d finished crossing the bridge.\n", tourist_id, group_id);
-        }
+            sem_wait(&data->mostSpots1);
+            data->mostWaiting1++;
+        };
+        //printf("\t\tDATAMOSTSIDE %d\n", data->mostSide);
+        if(data->mostWaiting2==0 && data->mostSide!=1)
+        {
+            data->mostSide=1;
+        };
+        //printf("\t\tDATAMOSTSIDE %d\n", data->mostSide);
+        
+        while(data->mostSide!=1 && data->mostCounter2>0);
+        for (int i = 0; i < children_count+1; i++) 
+        {
+            data->mostCounter1++;
+        };
+        printf("Tourist %d from group %d is crossing the bridge.\n",tourist_id, group_id);
+        sleep(mostTime);
+        printf("Tourist %d from group %d finished crossing the bridge.\n", tourist_id, group_id);        
+        if(data->mostWaiting2>0 && data->mostSide!=2)
+        {
+            data->mostSide=2;
+        };
+        for (int i = 0; i < children_count+1; i++) 
+        {
+            data->mostCounter1--;
+            data->mostWaiting1--;
+            sem_post(&data->mostSpots1);
+        };
+        //printf("\t\tDATAMOSTSIDE %d\n", data->mostSide);
+        
     }
     else if(trasa==2)
     {
-        if(data->mostSide==2)
+        for (int i = 0; i < children_count+1; i++) 
         {
-            printf("Tourist %d from group %d is crossing the bridge. %s\n",tourist_id, group_id, is_child ? "Child" : "Adult");
-            data->mostCounter++;
-            sleep(mostTime);  // Use the calculated family time for consistency
-            data->mostCounter--;
-            printf("Tourist %d from group %d finished crossing the bridge.\n", tourist_id, group_id);
-        }
+            sem_wait(&data->mostSpots1);
+            data->mostWaiting2++;
+        };
+        if(data->mostWaiting1==0 && data->mostSide!=2)
+        {
+            data->mostSide=2;
+        };
+        while(data->mostSide!=2 && data->mostCounter1>0);
+        for (int i = 0; i < children_count+1; i++) 
+        {
+            data->mostCounter2++;
+        };
+        printf("Tourist %d from group %d is crossing the bridge.\n",tourist_id, group_id);
+        sleep(mostTime);
+        printf("Tourist %d from group %d finished crossing the bridge.\n", tourist_id, group_id);
+        if(data->mostWaiting1>0 && data->mostSide!=1)
+        {
+            data->mostSide=1;
+        };
+        for (int i = 0; i < children_count+1; i++) 
+        {
+            data->mostCounter2--;
+            data->mostWaiting2--;
+            sem_post(&data->mostSpots2);
+        };
     }
-    
 
-    sem_post(&data->mostSpots);
     return;
-
-
 }
 
 
 // Tower climbing function
-void wieza(TourData* data, int tourist_id, int group_id, int is_child, int is_below_five, int is_parent, int children_count, pthread_t* children_tids) 
+void wieza(TourData* data, int tourist_id, int group_id, int children_count) 
 {
-sem_wait(&data->wiezaSpots);  // Semaphore for wieza spot
+    sem_wait(&data->wiezaSpots);  // Semaphore for wieza spot
+    for (int i = 0; i < children_count; i++) 
+    {
+        sem_wait(&data->wiezaSpots);
+    }
 
     srand(time(NULL));  // Seed the random number generator
     int wiezaTime = rand() % 5 + 1;  // Random time between 1 and 5
 
-    if (is_parent) {
-        if (children_count <= 0 || children_tids == NULL) {
-            fprintf(stderr, "Error: Rodzic turysta %d nie ma waznych informacji o dzieciach\n", tourist_id);
-            sem_post(&data->wiezaSpots);  // Release semaphore to avoid blocking
-            return;
-        }
-        int skipAttraction = 0;
-
-        printf("Rodzic turysta %d z grupy %d koordynuje %d dzieci przy wiezy\n",
-               tourist_id, group_id, children_count);
-
-        // Wait for readiness messages from all children
-        for (int i = 0; i < children_count; i++) {
-            struct message msg;
-            if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), getpid(), 0) == -1) {
-                perror("msgrcv - parent from child");
-                exit(1);
-            }
-            if (msg.value == 1) {
-                skipAttraction = 1;
-                wiezaTime = 0;
-            }
-            printf("Rodzic otrzymal wiadomość od dziecka z grupy %d\n", group_id);
-        }
-
-        printf("Wszystkie dzieci rodzica turysty %d z grupy %d sa gotowe przy wiezy\n",
-               tourist_id, group_id);
-
-        // Send the wieza time to each child
-        for (int i = 0; i < children_count; i++) {
-            struct message msg;
-            msg.mtype = children_tids[i];  // Use each child's TID
-            msg.pid = 0;
-            msg.value = wiezaTime;  // Include the time
-            if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
-                perror("msgsnd - parent to child");
-                exit(1);
-            }
-
-            printf("Rodzic wyslal czas wiezy do dziecka %lu z grupy %d\n", (unsigned long)children_tids[i], group_id);
-        }
-        if (skipAttraction) {
-            printf("Rodzic %d i jego dzieci omijaja wieze\n", tourist_id);
-            sem_post(&data->wiezaSpots);
-            return;
-        };
-    } else if (is_child) {
-        // Send readiness message to the parent
-        struct message msg;
-        msg.mtype = getppid();  // Send to the parent's PID
-        msg.pid = 0;
-        msg.value = is_below_five;
-        if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
-            perror("msgsnd - child to parent");
-            exit(1);
-        }
-        printf("Dziecko turysta %d z grupy %d wyslalo wiadomosc gotowosci\n", tourist_id, group_id);
-
-        // Receive the wieza time from the parent
-        if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), pthread_self(), 0) == -1) {
-            perror("msgrcv - child from parent");
-            exit(1);
-        }
-
-        if ((wiezaTime = msg.value) == 0) {
-            printf("Dziecko turysta %d z grupy %d omija wieze razem z rodzina\n", tourist_id, group_id);
-            sem_post(&data->wiezaSpots);
-            return;
-        };  // Use the received wieza time
-    }
-
     // Simulate wieza activity
-    printf("Turysta %d z grupy %d spedza czas przy wiezy %s\n", tourist_id, group_id, is_child ? "Dziecko" : "Dorosly");
+    printf("Turysta %d z grupy %d spedza czas przy wiezy\n", tourist_id, group_id);
     sleep(wiezaTime);
     printf("Turysta %d z grupy %d zakonczyl pobyt przy wiezy\n", tourist_id, group_id);
 
     // Release the semaphore
     sem_post(&data->wiezaSpots);
+    for (int i = 0; i < children_count; i++) {
+            sem_post(&data->wiezaSpots);
+        }
+    return;
 }
 
 
 // Ferry riding function
-void prom(TourData* data, int tourist_id, int group_id, int is_child, int is_parent, int children_count)
+void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa)
 {
-    // If the parent, wait for all children to acquire the semaphore first
-    if (is_parent) {
-        printf("Parent tourist %d from group %d is waiting for %d children to take their spots on the ferry.\n",
-               tourist_id, group_id, children_count);
-
-        for (int i = 0; i < children_count; i++) {
-            sem_wait(&data->promSpots); // Wait for each child
+    int ferry_time=PROM;
+    if(trasa==1)
+    {
+        for(int i=1;i<children_count+1;i++)
+        {
+            sem_wait(&data->promSpots1);
+            
+        }
+        while(data->promSide!=1)
+        {
+            if (sem_trywait(&data->promSpots2) == 0) {
+                // Someone is waiting on the other side, release and keep waiting
+                sem_post(&data->promSpots2);
+                continue;
+            }
+            // No one is waiting on the other side, summon the ferry
+            printf("Tourist %d from group %d is summoning the ferry to side 1.\n", tourist_id, group_id);
+            data->promSide = 1;
+        };
+        printf("Tourist %d from group %d is riding the ferry.\n",tourist_id, group_id);
+        sleep(ferry_time);
+        printf("Tourist %d from group %d finished riding the ferry.\n", tourist_id, group_id);
+        if(data->promSide==1)
+        {
+            data->promSide=2;
+        }
+        
+        for(int i=1;i<children_count+1;i++)
+        {
+            sem_post(&data->promSpots1);
         }
 
-        printf("All children of parent tourist %d from group %d have taken their spots on the ferry.\n",
-               tourist_id, group_id);
     }
 
-    // Each process (parent or child) waits for a spot
-    sem_wait(&data->promSpots);
-
-    printf("Tourist %d from group %d is riding the ferry. %s\n",
-           tourist_id, group_id, is_child ? "Child" : "Adult");
-
-    // Simulate ferry ride time, with 50% longer time for children
-    int ferry_time = is_child ? 5 : 3;
-    sleep(ferry_time);
-
-    printf("Tourist %d from group %d finished riding the ferry.\n", tourist_id, group_id);
-
-    sem_post(&data->promSpots); // Release the ferry spot
+    else if(trasa==2)
+    {
+        for(int i=1;i<children_count+1;i++)
+        {
+            sem_wait(&data->promSpots2);
+        }
+        while(data->promSide!=2)
+        {
+            if (sem_trywait(&data->promSpots1) == 0) {
+                // Someone is waiting on the other side, release and keep waiting
+                sem_post(&data->promSpots1);
+                continue;
+            }
+            // No one is waiting on the other side, summon the ferry
+            printf("Tourist %d from group %d is summoning the ferry to side 2.\n", tourist_id, group_id);
+            data->promSide = 2;
+        };
+        printf("Tourist %d from group %d is riding the ferry.\n",tourist_id, group_id);
+        sleep(ferry_time);
+        printf("Tourist %d from group %d finished riding the ferry.\n", tourist_id, group_id);
+        if(data->promSide==2)
+        {
+            data->promSide=1;
+        }
+        
+        for(int i=1;i<children_count+1;i++)
+        {
+            sem_post(&data->promSpots2);
+        }
+    }
+     // Release the ferry spot
 }
