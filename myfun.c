@@ -42,6 +42,7 @@ CheckoutData *checkoutSetupShm()
         data->exit_tail=0;   // Head and tail for exiting queue
         data->enter_turn=1;
         data->initialized=1;
+        data->processedCounter=0;
             
         for(int i=0;i<P;i++)
         {
@@ -54,7 +55,8 @@ CheckoutData *checkoutSetupShm()
         sem_init(&data->mutex, 1, 1);  
         sem_init(&data->enter_sem, 1, 0);  
         sem_init(&data->exit_sem, 1, 0);  
-        sem_init(&data->working, 1, 0);  
+        sem_init(&data->working, 1, 0);
+        sem_init(&data->cleanupMutex, 1, 1);  
         // for (int i = 0; i < P; i++) {
         //     sem_init(&data->group_ready[i], 1, 0);  // Group ready semaphores
         // }
@@ -108,7 +110,9 @@ TourData *tourSetupShm(){
         sem_init(&data->mostSpots2, 1, X1);  
         sem_init(&data->wiezaSpots, 1, X2);  
         sem_init(&data->promSpots1, 1, X3);  
-        sem_init(&data->promSpots2, 1, X3);  
+        sem_init(&data->promSpots2, 1, X3);
+        sem_init(&data->promMutex, 1, 1);
+        sem_init(&data->cleanupMutex, 1, 1);  
 
         
         data->mostCounter1=0;
@@ -131,6 +135,8 @@ TourData *tourSetupShm(){
 
 void checkoutCleanup(CheckoutData* data)
 {
+    sem_wait(&data->cleanupMutex);
+    printf("\t\t\t\t\t\t\tCHECKOUT CONNECTED %d\n", data->connected);
     data->connected--;
     if(data->connected==0)
     {
@@ -168,11 +174,18 @@ void checkoutCleanup(CheckoutData* data)
 
         printf("CheckoutData cleanup completed by PID: %d\n", getpid());
     }
+    else
+    {
+        sem_post(&data->cleanupMutex);
+    }
 }
 
 void tourCleanup(TourData* data)
 {
+    sem_wait(&data->cleanupMutex);
+    printf("\t\t\t\t\t\t\tTOUR CONNECTED %d\n", data->connected);
     data->connected--;
+
     if(data->connected==0)
     {
     // Detach shared memory
@@ -212,6 +225,10 @@ void tourCleanup(TourData* data)
         
 
         printf("TourData cleanup completed by PID: %d\n", getpid());
+    }
+    else
+    {
+        sem_post(&data->cleanupMutex);
     }
 }
 
@@ -306,16 +323,15 @@ void processClients(CheckoutData* data) // kasjer function
     time_t Tk = current_time + PARK;    // Ending time
     struct message msg;
 
-    while (1)
+    while (current_time < Tk)
     {
-        current_time = time(NULL); // Get the current time
 
         // Check if the current time exceeds Tk
-        if (current_time > Tk)
-        {
-            printf(ANSI_COLOR_RED "Limit czasu osiagniety. Konczenie procesu kasjera.\n" ANSI_COLOR_RESET);
-            break; // Exit the loop
-        }
+        // if ()
+        // {
+            
+        //     break; // Exit the loop
+        // }
 
         sem_wait(&data->mutex);
 
@@ -353,7 +369,8 @@ void processClients(CheckoutData* data) // kasjer function
                     {
                         data->group_children[group]++;
                     }
-                    struct message msg;
+                    data->processedCounter++;
+                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
                     msg.mtype = clientID;
                     msg.value = group;
                     if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) 
@@ -365,6 +382,13 @@ void processClients(CheckoutData* data) // kasjer function
                 else
                 {
                     printf(ANSI_COLOR_BLUE "Nie znaleziono dostepnej grupy dla klienta %d.\n" ANSI_COLOR_RESET, clientID);
+                    msg.mtype=clientID;
+                    msg.value=-1;
+                    if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) 
+                    {
+                        perror(ANSI_COLOR_RED "msgsnd - blad podczas wysylania informacji o grupie" ANSI_COLOR_RESET);
+                        exit(1);
+                    }
                 }
             }
             data->enter_turn = 0;
@@ -378,6 +402,12 @@ void processClients(CheckoutData* data) // kasjer function
                     perror(ANSI_COLOR_RED "msgrcv - kasjer odbierajacy szczegoly klienta" ANSI_COLOR_RESET);
                     exit(1);
                 }
+                if(data->processedCounter>0)
+                {
+                    data->processedCounter--;
+                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
+                }
+                
                 int clientID = msg.pid; // Process exiting queue
                 printf(ANSI_COLOR_GREEN "Przetworzono wychodzacego klienta %d\n" ANSI_COLOR_RESET, clientID);
             }
@@ -385,8 +415,33 @@ void processClients(CheckoutData* data) // kasjer function
         }
 
         sem_post(&data->mutex); // Unlock shared resource
+        current_time = time(NULL);
         //sleep(1);
     }
+    printf(ANSI_COLOR_RED "Limit czasu osiagniety. Kasy czekaja na klientow konczacych trasy.\n" ANSI_COLOR_RESET);
+    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
+    while(data->processedCounter>0)
+    {
+        sem_wait(&data->mutex);
+        if (sem_trywait(&data->exit_sem) == 0) 
+            {
+                if (msgrcv(data->msqid, &msg, sizeof(pid_t) + sizeof(int), KASA2, 0) == -1) 
+                {
+                    perror(ANSI_COLOR_RED "msgrcv - kasjer odbierajacy szczegoly klienta" ANSI_COLOR_RESET);
+                    exit(1);
+                }
+                if(data->processedCounter>0)
+                {
+                    data->processedCounter--;
+                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
+                }
+                
+                int clientID = msg.pid; // Process exiting queue
+                printf(ANSI_COLOR_GREEN "Przetworzono wychodzacego klienta %d\n" ANSI_COLOR_RESET, clientID);
+            }
+        sem_post(&data->mutex);
+    }
+    printf(ANSI_COLOR_RED "Kasjer %d konczy prace.\n" ANSI_COLOR_RESET, getpid());
 }
 
 
@@ -402,9 +457,11 @@ void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk)
 
     // Wait here for full group or assign time limit
     printf("\t  PRZEWODNIK %d CZEKA NA GRUPE\n", getpid());
-    while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) && time(NULL)<Tk);
+    while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) || time(NULL)>Tk);
+    sem_wait(&checkoutdata->mutex);
     printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
     checkoutdata->group_active[nr]=1;
+    sem_post(&checkoutdata->mutex);
 }
 
 void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
@@ -584,8 +641,16 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
                 continue;
             }
             // No one is waiting on the other side, summon the ferry
-            printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 1.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-            data->promSide = 1;
+            
+            sem_wait(&data->promMutex);
+            if(data->promSide!=1)
+            {
+                data->promSide = 1;
+                printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 1.\n" ANSI_COLOR_RESET, tourist_id, group_id);
+                sleep(ferry_time);
+            }
+            sem_post(&data->promMutex);
+            
         }
 
         while (data->promCounter2 > 0 && data->prom != 0);
@@ -642,6 +707,14 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
             // No one is waiting on the other side, summon the ferry
             printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 2.\n" ANSI_COLOR_RESET, tourist_id, group_id);
             data->promSide = 2;
+            sem_wait(&data->promMutex);
+            if(data->promSide!=2)
+            {
+                printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 1.\n" ANSI_COLOR_RESET, tourist_id, group_id);
+                sleep(ferry_time);
+                data->promSide = 2;
+            }
+            sem_post(&data->promMutex);
         }
 
         while (data->promCounter1 > 0 && data->prom != 0);

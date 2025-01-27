@@ -29,8 +29,8 @@
 
 #define N 350
 #define VIP N/20
-#define M 30
-#define P 10
+#define M 10
+#define P 3
 #define K 10
 #define X1 24 // most
 #define X2 45 // wieza
@@ -59,6 +59,8 @@ typedef struct {
 
 	int msqid;
 
+	int processedCounter;
+
 	int connected;
 
     sem_t mutex;     // Protects access to the shared data
@@ -66,6 +68,7 @@ typedef struct {
     sem_t exit_sem;  // Tracks the number of clients in the exit queue
     //sem_t group_ready[P]; 
 	sem_t working;
+	sem_t cleanupMutex;
 	
 } CheckoutData;
 
@@ -99,6 +102,8 @@ typedef struct {
 	sem_t wiezaSpots;
 	sem_t promSpots1;
 	sem_t promSpots2;
+	sem_t promMutex;
+	sem_t cleanupMutex;
 
 } TourData;
 

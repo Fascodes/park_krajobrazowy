@@ -51,10 +51,14 @@ int main(int argc, char *argv[])
             below_five++;
         }
     }
+
+
     
 
     int mypid=getpid();
     printf("Tourist PID: %d, VIP: %d, Number of children: %d\n", mypid, vip_flag, children_count);
+
+    printf("\t\t\t\t\t\t\tBELOWFIVE %d\n", below_five);
     for (int i = 0; i < children_count; i++) {
         printf("\tChild %d age: %d\n", i + 1, children_ages[i]);
     }
@@ -80,7 +84,6 @@ int main(int argc, char *argv[])
     
 
     struct message msg;  // Local message struct
-    msg.value=0;
 
     // Receive message from the queue
     if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), mypid, 0) == -1) 
@@ -90,6 +93,29 @@ int main(int argc, char *argv[])
     }
 
     int mygroup = msg.value;
+
+    // If the park is closing and there was no group
+    if(mygroup == -1)
+    {
+        // Signal threads to stop
+        stopThreads = true;
+
+        // Wait for child threads to terminate
+        for (int i = 0; i < children_count; i++) {
+            pthread_join(child_threads[i], NULL);
+        }
+
+
+        checkoutCleanup(checkoutdata);
+        
+
+        //printf("Koniec turysta: %d\n", mypid);
+
+        return 0;
+    };
+
+
+
     pid_t myprzew=checkoutdata->groups[mygroup][0];
     
     printf("    TURYSTA PID: %d   grupa: %d   przewodnik: %d\n", mypid, mygroup, myprzew);

@@ -53,7 +53,7 @@ int main()
     //sleep(1);
     time_t current_time = time(NULL); // Starting time
     time_t Tk = current_time + 50;    // Ending time after 60 seconds
-    for(int i=0;i<N && current_time<Tk;i++)
+    for(int i=0;i<40 && current_time<Tk;i++)
     {
         pid_t pid = fork();
         if(pid<0)

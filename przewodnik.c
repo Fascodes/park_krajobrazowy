@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
 
     while(time(NULL)<Tk)
     {
-        przewodnikWaiting(checkoutdata, nr, Tk);
+        przewodnikWaiting(checkoutdata, nr, (time(NULL)+PARK/3));
 
         sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[nr] > 0 ? 1.5 : 1))); 
 
