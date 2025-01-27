@@ -2,6 +2,22 @@
 #include "myfun.h"
 
 
+volatile bool stopThreads = false;
+
+// Thread function that does nothing until signaled to exit
+void *idleThread(void *arg) {
+    int *child_id = (int *)arg;
+
+    printf("Child thread %d is idle and waiting for parent to terminate it.\n", *child_id);
+
+    while (!stopThreads) {
+        sleep(1); // Simulate idling (can be adjusted as needed)
+    }
+
+    printf("Child thread %d is terminating.\n", *child_id);
+    pthread_exit(NULL);
+}
+
 int main(int argc, char *argv[])
 {
     if (argc < 2) {
@@ -42,12 +58,25 @@ int main(int argc, char *argv[])
     for (int i = 0; i < children_count; i++) {
         printf("\tChild %d age: %d\n", i + 1, children_ages[i]);
     }
-    printf("\tBELOWFIVE:%d\n", below_five);
+
+    
     
 
     CheckoutData* checkoutdata=checkoutSetupShm();
 
     enterqueue(checkoutdata, 1, children_count);
+
+    pthread_t child_threads[X1];  // Array for child threads
+    int child_ids[X1];            // Array for child IDs
+
+    // Create threads for children
+    for (int i = 0; i < children_count; i++) {
+        child_ids[i] = i + 1;
+        if (pthread_create(&child_threads[i], NULL, idleThread, &child_ids[i]) != 0) {
+            perror("Failed to create thread");
+            return 1;
+        }
+    }
     
 
     struct message msg;  // Local message struct
@@ -177,11 +206,20 @@ else if(trasa==2)
     enterqueue(checkoutdata, 2, children_count);
 }
 
+    // Signal threads to stop
+    stopThreads = true;
+
+    // Wait for child threads to terminate
+    for (int i = 0; i < children_count; i++) {
+        pthread_join(child_threads[i], NULL);
+    }
+
+
     checkoutCleanup(checkoutdata);
     tourCleanup(tourdata);
     
 
-    printf("Koniec turysta: %d\n", mypid);
+    //printf("Koniec turysta: %d\n", mypid);
 
     return 0;
 }

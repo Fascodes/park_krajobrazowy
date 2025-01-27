@@ -303,7 +303,7 @@ int checkgroups(int people, CheckoutData* data)
 void processClients(CheckoutData* data) // kasjer function
 {
     time_t current_time = time(NULL); // Starting time
-    time_t Tk = current_time + 90;    // Ending time
+    time_t Tk = current_time + PARK;    // Ending time
     struct message msg;
 
     while (1)
@@ -337,7 +337,7 @@ void processClients(CheckoutData* data) // kasjer function
                 int group = checkgroups(people, data);
                 while (group == -1 && current_time < Tk)
                 {
-                    printf(ANSI_COLOR_YELLOW "Brak dostepnej grupy dla klienta %d. Oczekiwanie na dostepnosc.\n" ANSI_COLOR_RESET, clientID);
+                    //printf(ANSI_COLOR_YELLOW "Brak dostepnej grupy dla klienta %d. Oczekiwanie na dostepnosc.\n" ANSI_COLOR_RESET, clientID);
                     sem_post(&data->mutex); // Unlock while waiting
                     //sleep(1);
                     sem_wait(&data->mutex); // Reacquire lock
@@ -390,7 +390,7 @@ void processClients(CheckoutData* data) // kasjer function
 }
 
 
-void przewodnikWaiting(CheckoutData* checkoutdata, int nr)
+void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk)
 {
     //sem_wait(&checkoutdata->mutex);
     checkoutdata->group_active[nr]=0;
@@ -402,7 +402,7 @@ void przewodnikWaiting(CheckoutData* checkoutdata, int nr)
 
     // Wait here for full group or assign time limit
     printf("\t  PRZEWODNIK %d CZEKA NA GRUPE\n", getpid());
-    while(checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1);
+    while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) && time(NULL)<Tk);
     printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
     checkoutdata->group_active[nr]=1;
 }
@@ -428,7 +428,8 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
     printf("Przewodnik %d has received all messages from group %d. Simulating travel to destination...\n", getpid(), mygroup);
 
     // Simulate travel with a delay
-    //sleep(rand() % 5 + 1); // Replace 3 with the desired delay in seconds
+    srand(time(NULL) ^ (getpid()));
+    sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[mygroup] > 0 ? 1.5 : 1))); 
 
     // Notify the group that they have arrived
     // Group-specific message type for arrival notification
@@ -453,6 +454,7 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
 
 void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) 
 {
+    srand(time(NULL) ^ (getpid()));
     int mostTime = rand() % 5 + 1; // Domyslny czas przejscia przez most
 
     if (trasa == 1)
@@ -476,7 +478,7 @@ void most(TourData* data, int tourist_id, int trasa, int group_id, int children_
         }
 
         printf(ANSI_COLOR_BLUE "Turysta %d z grupy %d przechodzi przez most.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-        //sleep(mostTime);
+        sleep(mostTime);
         printf(ANSI_COLOR_BLUE "Turysta %d z grupy %d zakonczyl przejscie przez most.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
         if (data->mostWaiting2 > 0 && data->mostSide != 2)
@@ -512,7 +514,7 @@ void most(TourData* data, int tourist_id, int trasa, int group_id, int children_
         }
 
         printf(ANSI_COLOR_BLUE "Turysta %d z grupy %d przechodzi przez most.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-        //sleep(mostTime);
+        sleep(mostTime);
         printf(ANSI_COLOR_BLUE "Turysta %d z grupy %d zakonczyl przejscie przez most.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
         if (data->mostWaiting1 > 0 && data->mostSide != 1)
@@ -541,12 +543,13 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count)
         sem_wait(&data->wiezaSpots);
     }
 
-    srand(time(NULL));  // Seed the random number generator
+    // Seed the random number generator
+    srand(time(NULL) ^ (getpid()));
     int wiezaTime = rand() % 5 + 1;  // Random time between 1 and 5
 
     // Simulate wieza activity
     printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d spedza czas przy wiezy\n" ANSI_COLOR_RESET, tourist_id, group_id);
-    //sleep(wiezaTime);
+    sleep(wiezaTime);
     printf(ANSI_COLOR_GREEN "Turysta %d z grupy %d zakonczyl pobyt przy wiezy\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
     for (int i = 0; i < children_count; i++) 
@@ -572,7 +575,6 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
             data->promWaiting1++;
         }
 
-        printf(ANSI_COLOR_BLUE "PROM %d\n" ANSI_COLOR_RESET, tourist_id);
 
         while (data->promSide != 1)
         {
@@ -600,7 +602,7 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
             data->prom = 1;
         }
 
-        //sleep(ferry_time);
+        sleep(ferry_time);
 
         printf(ANSI_COLOR_GREEN "Turysta %d z grupy %d zakonczyl plyniecie promem.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
@@ -656,7 +658,7 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
             data->prom = 1;
         }
 
-        //sleep(ferry_time);
+        sleep(ferry_time);
 
         printf(ANSI_COLOR_GREEN "Turysta %d z grupy %d zakonczyl plyniecie promem.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 

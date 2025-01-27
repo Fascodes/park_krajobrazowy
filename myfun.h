@@ -4,7 +4,6 @@
 #include <sys/types.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <sys/sem.h>
 #include <semaphore.h>
@@ -13,6 +12,8 @@
 #include <signal.h>
 #include <time.h>
 #include <pthread.h>
+#include <stdbool.h>
+
 
 
 // przewodnicy musza czekac az grupa, ktora jest w trakcie zapelniania sie wystartuje wycieczke, zanim zaczna wypelniac swoja grupe
@@ -26,17 +27,18 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
-#define N 4000
+#define N 350
 #define VIP N/20
-#define M 300
+#define M 30
 #define P 10
 #define K 10
-#define X1 250 // most
-#define X2 450 // wieza
-#define X3 350 // prom
+#define X1 24 // most
+#define X2 45 // wieza
+#define X3 35 // prom
 #define KASA1 1
 #define KASA2 2
 #define PROM 5
+#define PARK 70
 
 // Shared memory structure
 typedef struct {
@@ -120,7 +122,7 @@ int checkgroups(int people, CheckoutData* data);
 
 void processClients(CheckoutData* data); // kasjer function
 
-void przewodnikWaiting(CheckoutData* checkoutdata, int nr);
+void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk);
 
 void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa);
 
