@@ -26,14 +26,14 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
-#define N 30
+#define N 4000
 #define VIP N/20
-#define M 10
-#define P 4
+#define M 300
+#define P 10
 #define K 10
-#define X1 7 // most
-#define X2 15 // wieza
-#define X3 12 // prom
+#define X1 250 // most
+#define X2 450 // wieza
+#define X3 350 // prom
 #define KASA1 1
 #define KASA2 2
 #define PROM 5
@@ -57,6 +57,8 @@ typedef struct {
 
 	int msqid;
 
+	int connected;
+
     sem_t mutex;     // Protects access to the shared data
     sem_t enter_sem; // Tracks the number of clients in the enter queue
     sem_t exit_sem;  // Tracks the number of clients in the exit queue
@@ -73,7 +75,13 @@ typedef struct {
 	int prom_queue1[N];
 	int prom_queue2[N];
 
-	int prom; //1,2 - zaleznie gdzie aktualnie jest prom, taka trasa mozna z niego korzystac
+	int connected;
+
+	int prom; 
+	int promCounter1;
+	int promCounter2;
+	int promWaiting1;
+	int promWaiting2;
 	int initialized;
 	int msqid;
 	int mostCounter1;
@@ -121,6 +129,10 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count);
 void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) ;
 
 void waitingForGroup(CheckoutData* checkoutdata, int mygroup);
+
+void tourCleanup(TourData* data);
+
+void checkoutCleanup(CheckoutData* data);
 
 
 // void startTour(); // for przewodnik

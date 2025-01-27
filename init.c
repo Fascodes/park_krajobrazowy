@@ -26,7 +26,7 @@ int main()
             } 
         }
     }
-    sleep(1);
+    //sleep(1);
 
 
     int P_length=intLength(P);
@@ -50,10 +50,10 @@ int main()
             } 
         }
     }
-    sleep(1);
+    //sleep(1);
     time_t current_time = time(NULL); // Starting time
     time_t Tk = current_time + 50;    // Ending time after 60 seconds
-    for(int i=0;i<40 && current_time<Tk;i++)
+    for(int i=0;i<N && current_time<Tk;i++)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -79,38 +79,6 @@ int main()
         //sleep(1);
         current_time=time(NULL); 
     }
-
-
-    key_t key = ftok("/tmp", 'C');  // Use a file and project identifier
-    if (key == -1) {
-        perror("cleanup");
-        exit(1);
-    }
-
-    // Create or get the shared memory segment with shmget using the generated key
-    int shmID = shmget(key, sizeof(CheckoutData), IPC_CREAT | 0666);
-    if (shmID == -1) {
-        perror("cleanup");
-        exit(1);
-    }
-
-    // Attach the shared memory to the process's address space
-    CheckoutData *data = (CheckoutData *)shmat(shmID, NULL, 0);
-    if (data == (CheckoutData *)-1) {
-        perror("cleanup");
-        exit(1);
-    }
-    for(int i=0; i<P+K-1;i++)
-    {
-        sem_wait(&data->working); // Wait for each process to signal
-        sem_post(&data->mutex);
-    }
-    
-    
-    shmdt(data); // Detach memory
-    shmctl(shmID, IPC_RMID, NULL); // Mark memory for deletion
-    msgctl(data->msqid, IPC_RMID, NULL);  // Remove the message queue
-    printf("CLEANUP DONE by init\n");
 }
 
 

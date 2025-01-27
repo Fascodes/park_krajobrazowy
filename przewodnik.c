@@ -19,11 +19,12 @@ int main(int argc, char* argv[])
     //printf("Przewodnik changing values %d\n",getpid());
     przewodnikWaiting(checkoutdata, nr);
 
-    sleep(rand() % 5 + 1); // Replace 3 with the desired delay in seconds
+    sleep(rand() % 5 + 1); 
 
     // Notify the group that they have arrived
 
-    int trasa=((rand()%20+1)%2)+1;
+    //int trasa=((rand()%20+1)%2)+1;
+    int trasa=2;
 
     for(int i=0;i<checkoutdata->group_counts[nr]-1;i++)
     {
@@ -43,13 +44,14 @@ if(trasa==1)
     //wieza
     waitingForGroup(checkoutdata, nr);
 
-    prom(tourdata, getpid(), nr, trasa, 0);
+    prom(tourdata, getpid(), nr, 0, trasa);
 
     waitingForGroup(checkoutdata, nr);
 }
 else if(trasa==2)
 {
-    prom(tourdata, getpid(), nr, trasa, 0);
+    printf("TUTAJ\n");
+    prom(tourdata, getpid(), nr, 0, trasa);
 
     waitingForGroup(checkoutdata, nr);
     //wieza
@@ -61,8 +63,8 @@ else if(trasa==2)
 }
     
 
-    sem_wait(&checkoutdata->mutex);
-    sem_post(&checkoutdata->working);
+    checkoutCleanup(checkoutdata);
+    tourCleanup(tourdata);
     
     //TourData* tourdata=tourSetupShm();
     return 0;

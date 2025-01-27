@@ -93,8 +93,11 @@ if(trasa==1)
         exit(1);
     }
 
-
-    wieza(tourdata, mypid, mygroup, children_count);
+    if(below_five>0)
+    {
+        wieza(tourdata, mypid, mygroup, children_count);
+    }
+    
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
@@ -113,6 +116,11 @@ if(trasa==1)
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
         perror("msgsnd - przewodnik notifying group arrival");
+        exit(1);
+    }
+    if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), mypid, 0) == -1) 
+    {
+        perror("msgrcv");
         exit(1);
     }
 
@@ -134,8 +142,12 @@ else if(trasa==2)
         perror("msgrcv");
         exit(1);
     }
-
-    wieza(tourdata, mypid, mygroup, children_count);
+    
+    if(below_five>0)
+    {
+        wieza(tourdata, mypid, mygroup, children_count);
+    }
+    
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
@@ -156,9 +168,17 @@ else if(trasa==2)
         perror("msgsnd - przewodnik notifying group arrival");
         exit(1);
     }
+    if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), mypid, 0) == -1) 
+    {
+        perror("msgrcv");
+        exit(1);
+    }
 
     enterqueue(checkoutdata, 2, children_count);
 }
+
+    checkoutCleanup(checkoutdata);
+    tourCleanup(tourdata);
     
 
     printf("Koniec turysta: %d\n", mypid);
