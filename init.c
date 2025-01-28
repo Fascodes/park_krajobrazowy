@@ -2,12 +2,25 @@
 #include "myfun.h"
 #include <time.h>
 
-#define K 10
-#define P 10
 
+
+int intLength(int num);
 
 int main()
 {
+    CheckoutData* data=checkoutSetupShm();
+    // Allow the user to assign a value to data->max_turysci
+    printf("Podaj max liczbe turystow w parku: ");
+    int max_tourists;
+    if (scanf("%d", &max_tourists) != 1 || max_tourists <= 0)
+    {
+        fprintf(stderr, "Nieprawidlowy input\n");
+        exit(1);
+    }
+
+    sem_wait(&data->mutex);  
+    data->maxTurysci = max_tourists;
+    sem_post(&data->mutex);  
 
     for(int i=0;i<K;i++)
     {
@@ -26,9 +39,35 @@ int main()
             } 
         }
     }
-    sleep(1);
+    sleep(2);
 
-    // for(int i=0;i<P;i++)
+
+    int P_length=intLength(P);
+    for(int i=0;i<P;i++)
+    {
+        pid_t pid = fork();
+        
+        if(pid<0)
+        {
+            perror("FORK ERROR - init\n");
+            exit(1);
+        }
+        else if(pid == 0) // child process
+        {
+            char przewNR[P_length+2]; // Enough space for "50\0"
+            snprintf(przewNR, sizeof(przewNR), "%d", i); // Convert age to string
+            if(execl("./przewodnik", "./przewodnik", przewNR,(char*) NULL)==-1)
+            {
+                perror("EXEC ERROR - przewodnik\n");
+                exit(1);
+            } 
+        }
+    }
+    sleep(2);
+    
+
+
+    // for(int i=0;i<40;i++)
     // {
     //     pid_t pid = fork();
     //     if(pid<0)
@@ -38,16 +77,24 @@ int main()
     //     }
     //     else if(pid == 0) // child process
     //     {
-    //         if(execl("./przewodnik", "./przewodnik", (char*) NULL)==-1)
+    //         //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
+    //         int age = 0;
+    //         char age_str[4]; // Enough space for "50\0"
+    //         snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
+    //         if(execl("./turysta", "./turysta", age_str,(char*) NULL)==-1)
     //         {
-    //             perror("EXEC ERROR - przewodnik\n");
+    //             perror("EXEC ERROR - turysta\n");
     //             exit(1);
-    //         } 
+    //         }
+            
     //     }
+    //     sleep(1);
     // }
-    // sleep(1);
 
-    for(int i=0;i<N;i++)
+    time_t current_time = time(NULL); // Starting time
+    time_t Tk=current_time+PARK;
+    
+    while(data->turCounter<data->maxTurysci && current_time < Tk)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -57,9 +104,7 @@ int main()
         }
         else if(pid == 0) // child process
         {
-            srand(time(NULL));
-            
-            int age = (rand() % 50) + 1; // Generate random age between 1 and 50
+            int age = 0;
             char age_str[4]; // Enough space for "50\0"
             snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
             if(execl("./turysta", "./turysta", age_str,(char*) NULL)==-1)
@@ -69,38 +114,49 @@ int main()
             }
             
         }
-        sleep(1); 
+        sleep(1);
+        current_time = time(NULL);
     }
 
-    //while() // tutaj semafor w przewodniku do zamkniecia parku
 
-    key_t key = ftok("/tmp", 'C');  // Use a file and project identifier
-    if (key == -1) {
-        perror("cleanup");
-        exit(1);
-    }
 
-    // Create or get the shared memory segment with shmget using the generated key
-    int shmID = shmget(key, sizeof(CheckoutData), IPC_CREAT | 0666);
-    if (shmID == -1) {
-        perror("cleanup");
-        exit(1);
-    }
-
-    // Attach the shared memory to the process's address space
-    CheckoutData *data = (CheckoutData *)shmat(shmID, NULL, 0);
-    if (data == (CheckoutData *)-1) {
-        perror("cleanup");
-        exit(1);
-    }
-    for(int i=0; i<K;i++)
+    
+    while(current_time < Tk)
     {
-        sem_wait(&data->working); // Wait for each process to signal
-        //sem_post(&data->mutex);
+        sleep(2);
+        current_time = time(NULL);
+    };
+    sem_wait(&data->mutex);
+    data->parkClosed=1;
+    sem_post(&data->mutex);
+    printf("\t\t\t\t\t\tINIT ROZLACZA SIE\n");
+    checkoutCleanup(data);
+}
+
+
+
+
+
+
+
+int intLength(int num) {
+    int length = 0;
+
+    // Handle 0 as a special case
+    if (num == 0) {
+        return 1;
     }
+
     
-    
-    shmdt(data); // Detach memory
-    shmctl(shmID, IPC_RMID, NULL); // Mark memory for deletion
-    printf("CLEANUP DONE by init\n");
+    if (num < 0) {
+        num = -num; 
+    }
+
+   
+    while (num > 0) {
+        num /= 10; 
+        length++;
+    }
+
+    return length;
 }
