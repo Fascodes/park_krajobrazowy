@@ -3,6 +3,14 @@
 
 
 volatile bool stopThreads = false;
+volatile bool in_prom = false;      
+volatile bool in_most = false;      
+volatile bool in_wieza = false;     
+
+CheckoutData* checkoutdata=NULL;
+TourData* tourdata=NULL;
+int children_count;
+pthread_t child_threads[X1];
 
 // Thread function that does nothing until signaled to exit
 void *idleThread(void *arg) {
@@ -15,6 +23,40 @@ void *idleThread(void *arg) {
     }
 
     pthread_exit(NULL);
+}
+
+void signal_handler(int sig) {
+    if (sig == SIGUSR1) {
+        // if(in_wieza)
+        // {
+        //     printf(ANSI_COLOR_WHITE "Turysta schodzi z wiezy\n" ANSI_COLOR_RESET);
+        //     sem_post(&tourdata->wiezaSpots);
+        // }
+        
+
+    } else if (sig == SIGUSR2) {
+        printf(ANSI_COLOR_WHITE "Turysta kieruje sie do kas\n" ANSI_COLOR_RESET);
+        if (!in_prom && !in_most && !in_wieza) 
+        {
+            enterqueue(checkoutdata, 2, children_count);
+            // Signal threads to stop
+            stopThreads = true;
+
+            // Wait for child threads to terminate
+            for (int i = 0; i < children_count; i++) {
+                pthread_join(child_threads[i], NULL);
+            }
+
+
+            checkoutCleanup(checkoutdata);
+            tourCleanup(tourdata);
+
+        } else {
+            printf("Turysta w trakcie zwiedzania ignoruje sygnal.\n");
+        }
+
+        // Add your custom logic for SIGUSR2 here if needed
+    }
 }
 
 int main(int argc, char *argv[])
@@ -31,8 +73,11 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    //signal(SIGUSR1, signal_handler);  // Handle SIGUSR1
+    signal(SIGUSR2, signal_handler);  // Handle SIGUSR2
+
     // Parse children ages
-    int children_count = argc - 2;
+    children_count = argc - 2;
     if (children_count > X1-1) {
         printf("ERROR: Liczba dzieci zby wysoka (%d).\n", X1-1);
         exit(1);
@@ -60,11 +105,11 @@ int main(int argc, char *argv[])
     
     
 
-    CheckoutData* checkoutdata=checkoutSetupShm();
+    checkoutdata=checkoutSetupShm();
 
     enterqueue(checkoutdata, 1, children_count);
 
-    pthread_t child_threads[X1];  // Array for child threads
+
     int child_ids[X1];            // Array for child IDs
 
     // Create threads for children
@@ -114,7 +159,7 @@ int main(int argc, char *argv[])
     
     printf("    TURYSTA PID: %d   grupa: %d   przewodnik: %d\n", mypid, mygroup, myprzew);
 
-    TourData* tourdata=tourSetupShm();
+    tourdata=tourSetupShm();
     
 
     while(checkoutdata->group_active[mygroup]!=1);
@@ -127,8 +172,9 @@ int main(int argc, char *argv[])
     int trasa=msg.value;
 if(trasa==1)
 {
-
+    in_most=true;
     most(tourdata, mypid, trasa, mygroup, children_count);
+    in_most=false;
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
@@ -144,7 +190,9 @@ if(trasa==1)
 
     if(below_five==0)
     {
+        in_wieza=true;
         wieza(tourdata, mypid, mygroup, children_count);
+        in_wieza=false;
     }
     
 
@@ -160,7 +208,9 @@ if(trasa==1)
         exit(1);
     }
 
+    in_prom=true;
     prom(tourdata, mypid, mygroup, children_count, trasa);
+    in_prom=false;
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
@@ -177,8 +227,9 @@ if(trasa==1)
 }
 else if(trasa==2)
 {
+    in_prom=true;
     prom(tourdata, mypid, mygroup, children_count, trasa);
-    
+    in_prom=false;
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {
@@ -194,7 +245,9 @@ else if(trasa==2)
     
     if(below_five>0)
     {
+        in_wieza=true;
         wieza(tourdata, mypid, mygroup, children_count);
+        in_wieza=false;
     }
     
 
@@ -210,7 +263,9 @@ else if(trasa==2)
         exit(1);
     }
 
+    in_most=true;
     most(tourdata, mypid, trasa, mygroup, children_count);
+    in_most=false;
 
     msg.mtype=checkoutdata->groups[mygroup][0];
     if (msgsnd(checkoutdata->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) {

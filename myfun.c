@@ -462,7 +462,7 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
 
     // Simulate travel with a delay
     srand((getpid()));
-    sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[mygroup] > 0 ? 1.5 : 1))); 
+    sleep((int)((rand() % 8 + 1) * (checkoutdata->group_children[mygroup] > 0 ? 1.5 : 1))); 
 
     // Notify the group that they have arrived
     // Group-specific message type for arrival notification
