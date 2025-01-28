@@ -36,7 +36,7 @@
 #define ANSI_COLOR_RESET "\x1b[0m"
 
 
-#define N 350
+#define N 50
 #define VIP N/20
 #define M 10
 #define P 4
@@ -52,10 +52,8 @@
 // Shared memory structure
 typedef struct {
 
-    int enter_head, enter_tail; // Head and tail for entering queue
-    int exit_head, exit_tail;   // Head and tail for exiting queue
 
-	int groups[P][M+1]; // Groups assigned to przewodnik, na pozycji 0 pid przewodnika
+	int groups[P][M+1]; // Groups assigned to przewodnik, [0] przewodnik
     int group_counts[P];      // Count of clients in each group
 	int group_children[P];
     int group_active[P];      // Status of each group (1 = active, 0 = inactive)
@@ -72,15 +70,15 @@ typedef struct {
 
 	int connected;
 
-	int checkoutcount;
+	int maxTurysci;
+	int turCounter;
+
 
     sem_t mutex;     // Protects access to the shared data
     sem_t enter_sem; // Tracks the number of clients in the enter queue
     sem_t exit_sem;  // Tracks the number of clients in the exit queue
-    //sem_t group_ready[P]; 
 	sem_t checkoutspace;
-	sem_t working;
-	sem_t cleanupMutex;
+	sem_t cleanupMutex;	
 	
 } CheckoutData;
 
@@ -101,6 +99,8 @@ typedef struct {
 	int mostWaiting1;
 	int mostWaiting2;
 	int promSide;
+
+
 
 	
 
@@ -133,7 +133,7 @@ void enterqueue(CheckoutData* data,int qNumber, int tourist);
 
 int checkgroups(int people, CheckoutData* data);
 
-void processClients(CheckoutData* data); // kasjer function
+void processClients(CheckoutData* data);
 
 void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* tourdata);
 
@@ -149,9 +149,3 @@ void tourCleanup(TourData* data);
 
 void checkoutCleanup(CheckoutData* data);
 
-
-
-
-// void startTour(); // for przewodnik
-
-// void endTour();

@@ -1,7 +1,14 @@
 #include "myfun.h"
 
 
-
+/**
+ * Tworzy i inicjuje segment pamieci wspoldzielonej dla danych kasowych.
+ *
+ * return Wskaznik na zainicjalizowane dane typu CheckoutData.
+ *
+ * Plik "/tmp" istnieje i dostepny jest identyfikator projektu 'C'.
+ * Segment pamieci wspoldzielonej zostal poprawnie utworzony i zainicjowany.
+ */
 CheckoutData *checkoutSetupShm()
 {
     // Generate a key using ftok() based on a file path and project ID
@@ -30,15 +37,11 @@ CheckoutData *checkoutSetupShm()
     data->connected++;
     if (data->initialized!=1)
     {
-        data->enter_turn=0;
-        data->enter_head=0; 
-        data->enter_tail=0; // Head and tail for entering queue
-        data->exit_head=0;
-        data->exit_tail=0;   // Head and tail for exiting queue
+        data->maxTurysci=N;
         data->enter_turn=1;
         data->initialized=1;
-        data->processedCounter=0;
         data->parkClosed=0;
+        data->turCounter=0;
             
         for(int i=0;i<P;i++)
         {
@@ -53,10 +56,7 @@ CheckoutData *checkoutSetupShm()
         sem_init(&data->exit_sem, 1, 0);  
         sem_init(&data->checkoutspace, 1, K);
         sem_init(&data->cleanupMutex, 1, 1);
-        data->checkoutcount=K;  
-        // for (int i = 0; i < P; i++) {
-        //     sem_init(&data->group_ready[i], 1, 0);  // Group ready semaphores
-        // }
+
         printf("CHECKOUT DATA Init finished by: %d\n",getpid());
     }
     
@@ -64,13 +64,17 @@ CheckoutData *checkoutSetupShm()
 
     return data;
 
-    // ADD CLEANUP LATER
-    // shmdt(data); 
-    // shmctl(shmID, IPC_RMID, NULL); 
 
 }
 
-
+/**
+ * Tworzy i inicjuje segment pamieci wspoldzielonej dla danych zwiazanych z atrakcjami turystycznymi.
+ *
+ * Wskaznik na zainicjalizowane dane typu TourData.
+ *
+ * Plik "/tmp" istnieje i dostepny jest identyfikator projektu 'T'.
+ * Segment pamieci wspoldzielonej zostal poprawnie utworzony i zainicjowany.
+ */
 TourData *tourSetupShm(){
     // Generate a key using ftok() based on a file path and project ID
     key_t key = ftok("/tmp", 'T');  // Use a file and project identifier
@@ -130,6 +134,14 @@ TourData *tourSetupShm(){
     return data;
 }
 
+/**
+ * Usuwa segment pamieci wspoldzielonej oraz kolejki komunikatow zwiazane z danymi kasowymi.
+ *
+ * param data Wskaznik na strukture CheckoutData do oczyszczenia.
+ *
+ * Wskaznik data wskazuje na poprawnie zainicjalizowana pamiec wspoldzielona.
+ * Pamiec wspoldzielona oraz kolejki komunikatow zostaly usuniete, jesli brak podlaczonych procesow.
+ */
 void checkoutCleanup(CheckoutData* data)
 {
     sem_wait(&data->cleanupMutex);
@@ -149,7 +161,6 @@ void checkoutCleanup(CheckoutData* data)
         key_t key = ftok("/tmp", 'C');
         if (key == -1) {
             perror("ftok - checkout cleanup");
-            sem_post(&data->mutex);  // Unlock in case of error
             return;
         }
 
@@ -157,7 +168,6 @@ void checkoutCleanup(CheckoutData* data)
         int shmID = shmget(key, sizeof(CheckoutData), 0666);
         if (shmID == -1) {
             perror("shmget - checkout cleanup");
-            sem_post(&data->mutex);
             return;
         }
 
@@ -165,10 +175,6 @@ void checkoutCleanup(CheckoutData* data)
         if (shmctl(shmID, IPC_RMID, NULL) == -1) {
             perror("shmctl - checkout cleanup");
         }
-
-        
-
-        
 
         printf("CheckoutData cleanup PID: %d\n", getpid());
     }
@@ -178,6 +184,15 @@ void checkoutCleanup(CheckoutData* data)
     }
 }
 
+
+/**
+ * Usuwa segment pamieci wspoldzielonej oraz kolejki komunikatow zwiazane z danymi turystycznymi.
+ *
+ * param data Wskaznik na strukture TourData do oczyszczenia.
+ *
+ * Wskaznik data wskazuje na poprawnie zainicjalizowana pamiec wspoldzielona.
+ * Pamiec wspoldzielona oraz kolejki komunikatow zostaly usuniete, jesli brak podlaczonych procesow.
+ */
 void tourCleanup(TourData* data)
 {
     sem_wait(&data->cleanupMutex);
@@ -190,7 +205,7 @@ void tourCleanup(TourData* data)
             perror("msgctl - tour cleanup");
         }
 
-    // Detach shared memory
+        // Detach shared memory
         if (shmdt(data) == -1) {
             perror("shmdt - tour cleanup");
         }
@@ -199,7 +214,6 @@ void tourCleanup(TourData* data)
         key_t key = ftok("/tmp", 'T');
         if (key == -1) {
             perror("ftok - tour cleanup");
-            sem_post(&data->mostSpots1);  // Unlock in case of error
             return;
         }
 
@@ -207,7 +221,6 @@ void tourCleanup(TourData* data)
         int shmID = shmget(key, sizeof(TourData), 0666);
         if (shmID == -1) {
             perror("shmget - tour cleanup");
-            sem_post(&data->mostSpots1);
             return;
         }
         
@@ -217,9 +230,6 @@ void tourCleanup(TourData* data)
             perror("shmctl - tour cleanup");
         }
 
-        
-
-        
 
         printf("TourData cleanup PID: %d\n", getpid());
     }
@@ -229,10 +239,18 @@ void tourCleanup(TourData* data)
     }
 }
 
-
+/**
+ * Obsluguje dodawanie klientow do odpowiedniej kolejki kasowej.
+ *
+ * param data Wskaznik na strukture CheckoutData.
+ * param qNumber Numer kolejki (1 dla wchodzacej, 2 dla wychodzacej).
+ * param children Liczba dzieci dolaczajacych do klienta.
+ *
+ * Wskaznik data jest poprawny, a qNumber nalezy do {1, 2}.
+ * Klient zostal dodany do odpowiedniej kolejki.
+ */
 void enterqueue(CheckoutData* data,int qNumber, int children)
 {
-    //printf("ENTERQ, %d  ARG:%d\t", getpid(),tourist);
     
     struct message msg;
     
@@ -243,7 +261,8 @@ void enterqueue(CheckoutData* data,int qNumber, int children)
 
         sem_wait(&data->checkoutspace);
         sem_wait(&data->mutex);
-        if(data->parkClosed)
+        data->turCounter++;
+        if(data->parkClosed || data->turCounter>=data->maxTurysci)
         {
             sem_post(&data->checkoutspace);
             sem_post(&data->mutex);
@@ -279,7 +298,14 @@ void enterqueue(CheckoutData* data,int qNumber, int children)
 
 }
 
-
+/**
+ * Sprawdza, czy istnieje dostepna grupa dla nowo przybylych turystow.
+ *
+ * param people Liczba osob do dolaczenia.
+ * param data Wskaznik na strukture CheckoutData.
+ * return Indeks dostepnej grupy lub -1, jesli brak miejsca.
+ *
+ */
 int checkgroups(int people, CheckoutData* data)
 {
     int group=-1;
@@ -296,7 +322,12 @@ int checkgroups(int people, CheckoutData* data)
     return group;
 }
 
-
+/**
+ * Obsluguje przetwarzanie klientow w kolejkach kasowych.
+ *
+ * param data Wskaznik na strukture CheckoutData.
+ *
+ */
 void processClients(CheckoutData* data) 
 {
 
@@ -416,14 +447,22 @@ void processClients(CheckoutData* data)
     printf(ANSI_COLOR_RED "Kasjer %d konczy prace.\n" ANSI_COLOR_RESET, getpid());
 }
 
-
+/**
+ * Oczekuje na uzupelnienie grupy turystycznej lub uplyniecie limitu czasu.
+ *
+ * param checkoutdata Wskaznik na dane kasowe.
+ * param nr Numer grupy.
+ * param Tk Limit czasu oczekiwania.
+ * param tourdata Wskaznik na dane turystyczne.
+ *
+ */
 void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* tourdata)
 {
     
 
     //struct message msg;  // Local message struct
 
-    // Wait here for full group or assign time limit
+
     printf(ANSI_COLOR_WHITE "\tPRZEWODNIK %d CZEKA NA GRUPE\n" ANSI_COLOR_RESET, getpid());
     time_t current_time=time(NULL);
     while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) && current_time<Tk)
@@ -440,6 +479,14 @@ void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* 
     }
 }
 
+
+/**
+ * Czeka na zakonczanie aktywnosci przez grupe turystyczna.
+ *
+ * param checkoutdata Wskaznik na dane kasowe.
+ * param mygroup Numer grupy turystycznej.
+ *
+ */
 void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
     struct message msg;
     int messagesReceived = 0;
@@ -454,8 +501,7 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
             exit(1);
         }
         messagesReceived++;
-        //printf("\t\tMESSAGES RECEIVED: %d\n", messagesReceived);
-        //printf("\t\tGROUP COUNT %d: %d\n",mygroup, checkoutdata->group_counts[mygroup]);
+
     }
 
     printf(ANSI_COLOR_WHITE "Przewodnik %d otrzymal wszystkie wiadomosci od grupy %d. Rozpoczyna droge do kolejnej atrakcji.\n" ANSI_COLOR_RESET, getpid(), mygroup);
@@ -464,8 +510,6 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
     srand((getpid()));
     sleep((int)((rand() % 8 + 1) * (checkoutdata->group_children[mygroup] > 0 ? 1.5 : 1))); 
 
-    // Notify the group that they have arrived
-    // Group-specific message type for arrival notification
 
     for(int i=0;i<checkoutdata->group_counts[mygroup]-1;i++)
     {
@@ -484,7 +528,16 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
 
 
 
-
+/**
+ * Obsluguje przejscie turysty przez most.
+ *
+ * param data Wskaznik na dane turystyczne.
+ * param tourist_id ID turysty.
+ * param trasa Numer trasy.
+ * param group_id ID grupy.
+ * param children_count Liczba dzieci dolaczajacych do turysty.
+ *
+ */
 void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) 
 {
     srand((getpid()));
@@ -567,7 +620,15 @@ void most(TourData* data, int tourist_id, int trasa, int group_id, int children_
 }
 
 
-// Tower climbing function
+/**
+ * Obsluguje wejscie turysty na wieze.
+ *
+ * param data Wskaznik na dane turystyczne.
+ * param tourist_id ID turysty.
+ * param group_id ID grupy.
+ * param children_count Liczba dzieci dolaczajacych do turysty.
+ *
+ */
 void wieza(TourData* data, int tourist_id, int group_id, int children_count) 
 {
     sem_wait(&data->wiezaSpots);  // Semaphore for wieza spot
@@ -576,7 +637,6 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count)
         sem_wait(&data->wiezaSpots);
     }
 
-    // Seed the random number generator
     srand((getpid()));
     int wiezaTime = rand() % 5 + 1;  // Random time between 1 and 5
 
@@ -594,7 +654,16 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count)
     return;
 }
 
-
+/**
+ * Obsluguje przeplywanie promem.
+ *
+ * param data Wskaznik na dane turystyczne.
+ * param tourist_id ID turysty.
+ * param trasa Numer trasy.
+ * param group_id ID grupy.
+ * param children_count Liczba dzieci dolaczajacych do turysty.
+ *
+ */
 void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa)
 {
     if(trasa==1)

@@ -19,7 +19,7 @@ void *idleThread(void *arg) {
     printf("Dziecko %d zaczyna trase z rodzicem.\n", *child_id);
 
     while (!stopThreads) {
-        sleep(1); // Simulate idling (can be adjusted as needed)
+        sleep(1);
     }
 
     pthread_exit(NULL);
@@ -27,11 +27,6 @@ void *idleThread(void *arg) {
 
 void signal_handler(int sig) {
     if (sig == SIGUSR1) {
-        // if(in_wieza)
-        // {
-        //     printf(ANSI_COLOR_WHITE "Turysta schodzi z wiezy\n" ANSI_COLOR_RESET);
-        //     sem_post(&tourdata->wiezaSpots);
-        // }
         
 
     } else if (sig == SIGUSR2) {
@@ -39,10 +34,10 @@ void signal_handler(int sig) {
         if (!in_prom && !in_most && !in_wieza) 
         {
             enterqueue(checkoutdata, 2, children_count);
-            // Signal threads to stop
+
             stopThreads = true;
 
-            // Wait for child threads to terminate
+
             for (int i = 0; i < children_count; i++) {
                 pthread_join(child_threads[i], NULL);
             }
@@ -54,8 +49,6 @@ void signal_handler(int sig) {
         } else {
             printf("Turysta w trakcie zwiedzania ignoruje sygnal.\n");
         }
-
-        // Add your custom logic for SIGUSR2 here if needed
     }
 }
 
@@ -100,7 +93,7 @@ int main(int argc, char *argv[])
     
 
     int mypid=getpid();
-    printf("Tourist PID: %d, VIP: %d, Dzieci: %d\n", mypid, vip_flag, children_count);
+    printf(ANSI_COLOR_WHITE "Tourist PID: %d, VIP: %d, Dzieci: %d\n" ANSI_COLOR_RESET, mypid, vip_flag, children_count);
 
     
     
@@ -110,8 +103,7 @@ int main(int argc, char *argv[])
     enterqueue(checkoutdata, 1, children_count);
 
 
-    int child_ids[X1];            // Array for child IDs
-
+    int child_ids[X1];
     // Create threads for children
     for (int i = 0; i < children_count; i++) {
         child_ids[i] = i + 1;
@@ -122,7 +114,7 @@ int main(int argc, char *argv[])
     }
     
 
-    struct message msg;  // Local message struct
+    struct message msg;  
 
     // Receive message from the queue
     if (msgrcv(checkoutdata->msqid, &msg, sizeof(pid_t)+sizeof(int), mypid, 0) == -1) 
@@ -133,13 +125,10 @@ int main(int argc, char *argv[])
 
     int mygroup = msg.value;
 
-    // If the park is closing and there was no group
     if(mygroup == -1)
     {
-        // Signal threads to stop
         stopThreads = true;
 
-        // Wait for child threads to terminate
         for (int i = 0; i < children_count; i++) {
             pthread_join(child_threads[i], NULL);
         }
@@ -147,8 +136,6 @@ int main(int argc, char *argv[])
 
         checkoutCleanup(checkoutdata);
         
-
-        //printf("Koniec turysta: %d\n", mypid);
 
         return 0;
     };
@@ -281,10 +268,10 @@ else if(trasa==2)
     enterqueue(checkoutdata, 2, children_count);
 }
 
-    // Signal threads to stop
+
     stopThreads = true;
 
-    // Wait for child threads to terminate
+
     for (int i = 0; i < children_count; i++) {
         pthread_join(child_threads[i], NULL);
     }
@@ -294,7 +281,6 @@ else if(trasa==2)
     tourCleanup(tourdata);
     
 
-    //printf("Koniec turysta: %d\n", mypid);
 
     return 0;
 }

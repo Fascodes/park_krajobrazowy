@@ -11,11 +11,6 @@ int nr;
 
 void signal_handler(int sig) {
     if (sig == SIGUSR1) {
-        // if(in_wieza)
-        // {
-        //     printf(ANSI_COLOR_WHITE "Turysta schodzi z wiezy\n" ANSI_COLOR_RESET);
-        //     sem_post(&tourdata->wiezaSpots);
-        // }
         
 
     } else if (sig == SIGUSR2) {
@@ -31,10 +26,9 @@ void signal_handler(int sig) {
             checkoutdata->group_children[nr]=0;
 
         } else {
-            printf(ANSI_COLOR_WHITE "Grupa jest w trakcie zwiedzania obiektu, sygnal nie otrzymany.\n" ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_WHITE "Grupa jest w trakcie zwiedzania obiektu, sygnal nie zostal otrzymany.\n" ANSI_COLOR_RESET);
         }
 
-        // Add your custom logic for SIGUSR2 here if needed
     }
 }
 
@@ -133,6 +127,5 @@ int main(int argc, char* argv[])
     checkoutCleanup(checkoutdata);
     tourCleanup(tourdata);
     
-    //TourData* tourdata=tourSetupShm();
     return 0;
 }
