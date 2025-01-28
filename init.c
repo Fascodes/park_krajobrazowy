@@ -91,9 +91,10 @@ int main()
     //     sleep(1);
     // }
 
-
+    time_t current_time = time(NULL); // Starting time
+    time_t Tk=current_time+PARK;
     
-    while(data->turCounter<data->maxTurysci)
+    while(data->turCounter<data->maxTurysci && current_time < Tk)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -115,12 +116,12 @@ int main()
             
         }
         sleep(1);
+        current_time = time(NULL);
     }
 
 
 
-    time_t current_time = time(NULL); // Starting time
-    time_t Tk=current_time+PARK;
+    
     while(current_time < Tk)
     {
         sleep(2);
