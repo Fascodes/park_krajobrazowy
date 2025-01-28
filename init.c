@@ -104,7 +104,6 @@ int main()
         }
         else if(pid == 0) // child process
         {
-            //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
             int age = 0;
             char age_str[4]; // Enough space for "50\0"
             snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
