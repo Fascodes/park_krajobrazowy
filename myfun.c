@@ -1,10 +1,6 @@
 #include "myfun.h"
 
-#define ANSI_COLOR_RED "\x1b[31m"
-#define ANSI_COLOR_GREEN "\x1b[32m"
-#define ANSI_COLOR_YELLOW "\x1b[33m"
-#define ANSI_COLOR_BLUE "\x1b[34m"
-#define ANSI_COLOR_RESET "\x1b[0m"
+
 
 CheckoutData *checkoutSetupShm()
 {
@@ -43,6 +39,7 @@ CheckoutData *checkoutSetupShm()
         data->enter_turn=1;
         data->initialized=1;
         data->processedCounter=0;
+        data->parkClosed=0;
             
         for(int i=0;i<P;i++)
         {
@@ -55,7 +52,7 @@ CheckoutData *checkoutSetupShm()
         sem_init(&data->mutex, 1, 1);  
         sem_init(&data->enter_sem, 1, 0);  
         sem_init(&data->exit_sem, 1, 0);  
-        sem_init(&data->working, 1, 0);
+        sem_init(&data->checkoutspace, 1, K);
         sem_init(&data->cleanupMutex, 1, 1);  
         // for (int i = 0; i < P; i++) {
         //     sem_init(&data->group_ready[i], 1, 0);  // Group ready semaphores
@@ -112,7 +109,7 @@ TourData *tourSetupShm(){
         sem_init(&data->promSpots1, 1, X3);  
         sem_init(&data->promSpots2, 1, X3);
         sem_init(&data->promMutex, 1, 1);
-        sem_init(&data->cleanupMutex, 1, 1);  
+        sem_init(&data->cleanupMutex, 1, 1);
 
         
         data->mostCounter1=0;
@@ -136,11 +133,16 @@ TourData *tourSetupShm(){
 void checkoutCleanup(CheckoutData* data)
 {
     sem_wait(&data->cleanupMutex);
-    printf("\t\t\t\t\t\t\tCHECKOUT CONNECTED %d\n", data->connected);
+    //printf("\t\t\t\t\t\t\tCHECKOUT CONNECTED %d\n", data->connected);
     data->connected--;
     if(data->connected==0)
     {
-    if (shmdt(data) == -1) {
+        // Remove the message queue
+        if (msgctl(data->msqid, IPC_RMID, NULL) == -1) {
+            perror("msgctl - checkout cleanup");
+        }
+
+        if (shmdt(data) == -1) {
             perror("shmdt - checkout cleanup");
         }
 
@@ -165,14 +167,11 @@ void checkoutCleanup(CheckoutData* data)
             perror("shmctl - checkout cleanup");
         }
 
-        // Remove the message queue
-        if (msgctl(data->msqid, IPC_RMID, NULL) == -1) {
-            perror("msgctl - checkout cleanup");
-        }
+        
 
         
 
-        printf("CheckoutData cleanup completed by PID: %d\n", getpid());
+        printf("CheckoutData cleanup PID: %d\n", getpid());
     }
     else
     {
@@ -183,11 +182,16 @@ void checkoutCleanup(CheckoutData* data)
 void tourCleanup(TourData* data)
 {
     sem_wait(&data->cleanupMutex);
-    printf("\t\t\t\t\t\t\tTOUR CONNECTED %d\n", data->connected);
+    //printf("\t\t\t\t\t\t\tTOUR CONNECTED %d\n", data->connected);
     data->connected--;
 
     if(data->connected==0)
     {
+        // Remove the message queue
+        if (msgctl(data->msqid, IPC_RMID, NULL) == -1) {
+            perror("msgctl - tour cleanup");
+        }
+
     // Detach shared memory
         if (shmdt(data) == -1) {
             perror("shmdt - tour cleanup");
@@ -215,16 +219,11 @@ void tourCleanup(TourData* data)
             perror("shmctl - tour cleanup");
         }
 
-        printf("MESSAGE NOT CLEANED UP\n");
-        // Remove the message queue
-        if (msgctl(data->msqid, IPC_RMID, NULL) == -1) {
-            perror("msgctl - tour cleanup");
-        }
-        printf("MESSAGE CLEANED UP\n");
+        
 
         
 
-        printf("TourData cleanup completed by PID: %d\n", getpid());
+        printf("TourData cleanup PID: %d\n", getpid());
     }
     else
     {
@@ -236,7 +235,7 @@ void tourCleanup(TourData* data)
 void enterqueue(CheckoutData* data,int qNumber, int children)
 {
     //printf("ENTERQ, %d  ARG:%d\t", getpid(),tourist);
-    sem_wait(&data->mutex);  // Lock access to shared resources
+    
     struct message msg;
     
     msg.pid=getpid();
@@ -245,6 +244,17 @@ void enterqueue(CheckoutData* data,int qNumber, int children)
     {
         // data->enter_queue[data->enter_tail]=tourist;
         // data->enter_tail=(data->enter_tail+1)%N;
+
+        sem_wait(&data->checkoutspace);
+        sem_wait(&data->mutex);
+        if(data->parkClosed)
+        {
+            sem_post(&data->checkoutspace);
+            checkoutCleanup(data);
+            exit(0);
+        }
+        sem_post(&data->mutex);
+
         msg.mtype=KASA1;
         sem_post(&data->enter_sem);
         
@@ -258,6 +268,7 @@ void enterqueue(CheckoutData* data,int qNumber, int children)
     }
     else if(qNumber==2)
     {
+        //sem_wait(&data->mutex);  // Lock access to shared resources
         // data->exit_queue[data->exit_tail]=tourist;
         // data->exit_tail=(data->exit_tail+1)%N;
         msg.mtype=KASA2;
@@ -267,38 +278,12 @@ void enterqueue(CheckoutData* data,int qNumber, int children)
             perror("msgsnd");
             exit(1);
         }
-        
+        //sem_post(&data->mutex);  // Unlock access to shared resources
     }
-    sem_post(&data->mutex);  // Unlock access to shared resources
+    
 
 }
 
-// int leavequeue(CheckoutData* data,int qNumber)
-// {
-//     //printf("LEAVEQ %d qNumber=%d\n", getpid(), qNumber);
-//     int clientID=-1;
-//     if(qNumber==1)
-//     {
-
-
-//         clientID=data->enter_queue[data->enter_head];
-//         data->enter_queue[data->enter_head]=0;
-//         data->enter_head=(data->enter_head+1)%N;
-
-
-//     }
-//     else if(qNumber==2)
-//     {
-        
-//         clientID=data->exit_queue[data->exit_head];
-//         data->exit_queue[data->exit_head]=0;
-//         data->exit_head=(data->exit_head+1)%N;
-
-
-//     }
-//     //printf("CLIENT: %d\n",clientID);
-//     return clientID;
-// }
 
 int checkgroups(int people, CheckoutData* data)
 {
@@ -319,19 +304,12 @@ int checkgroups(int people, CheckoutData* data)
 
 void processClients(CheckoutData* data) // kasjer function
 {
-    time_t current_time = time(NULL); // Starting time
-    time_t Tk = current_time + PARK;    // Ending time
+
     struct message msg;
 
-    while (current_time < Tk)
+    while (!data->parkClosed)
     {
 
-        // Check if the current time exceeds Tk
-        // if ()
-        // {
-            
-        //     break; // Exit the loop
-        // }
 
         sem_wait(&data->mutex);
 
@@ -351,26 +329,26 @@ void processClients(CheckoutData* data) // kasjer function
 
                 // Check for available group
                 int group = checkgroups(people, data);
-                while (group == -1 && current_time < Tk)
+                while (group == -1 && !(data->parkClosed))
                 {
                     //printf(ANSI_COLOR_YELLOW "Brak dostepnej grupy dla klienta %d. Oczekiwanie na dostepnosc.\n" ANSI_COLOR_RESET, clientID);
                     sem_post(&data->mutex); // Unlock while waiting
                     //sleep(1);
                     sem_wait(&data->mutex); // Reacquire lock
                     group = checkgroups(people, data);
-                    current_time = time(NULL);
                 }
 
                 if (group != -1)
                 {
                     data->groups[group][data->group_counts[group]] = clientID;
                     data->group_counts[group]++;
+                    data->processedCounter++;
                     for (int i = 0; i < people - 1; i++)
                     {
                         data->group_children[group]++;
                     }
-                    data->processedCounter++;
-                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
+                    
+                    //printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
                     msg.mtype = clientID;
                     msg.value = group;
                     if (msgsnd(data->msqid, &msg, sizeof(pid_t) + sizeof(int), 0) == -1) 
@@ -378,6 +356,7 @@ void processClients(CheckoutData* data) // kasjer function
                         perror(ANSI_COLOR_RED "msgsnd - blad podczas wysylania informacji o grupie" ANSI_COLOR_RESET);
                         exit(1);
                     }
+                    sem_post(&data->checkoutspace);
                 }
                 else
                 {
@@ -389,6 +368,7 @@ void processClients(CheckoutData* data) // kasjer function
                         perror(ANSI_COLOR_RED "msgsnd - blad podczas wysylania informacji o grupie" ANSI_COLOR_RESET);
                         exit(1);
                     }
+                    sem_post(&data->checkoutspace);
                 }
             }
             data->enter_turn = 0;
@@ -405,7 +385,7 @@ void processClients(CheckoutData* data) // kasjer function
                 if(data->processedCounter>0)
                 {
                     data->processedCounter--;
-                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
+                    //printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER %d\n", data->processedCounter);
                 }
                 
                 int clientID = msg.pid; // Process exiting queue
@@ -415,11 +395,10 @@ void processClients(CheckoutData* data) // kasjer function
         }
 
         sem_post(&data->mutex); // Unlock shared resource
-        current_time = time(NULL);
         //sleep(1);
     }
     printf(ANSI_COLOR_RED "Limit czasu osiagniety. Kasy czekaja na klientow konczacych trasy.\n" ANSI_COLOR_RESET);
-    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
+    //printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
     while(data->processedCounter>0)
     {
         sem_wait(&data->mutex);
@@ -433,7 +412,7 @@ void processClients(CheckoutData* data) // kasjer function
                 if(data->processedCounter>0)
                 {
                     data->processedCounter--;
-                    printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
+                    //printf("\t\t\t\t\t\t\tPROCESSEDCOUNTER AFTER CLOSING %d\n", data->processedCounter);
                 }
                 
                 int clientID = msg.pid; // Process exiting queue
@@ -445,23 +424,27 @@ void processClients(CheckoutData* data) // kasjer function
 }
 
 
-void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk)
+void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* tourdata)
 {
-    //sem_wait(&checkoutdata->mutex);
-    checkoutdata->group_active[nr]=0;
-    checkoutdata->groups[nr][0]=getpid();
-    checkoutdata->group_counts[nr]=1;
-    //sem_post(&checkoutdata->mutex);
+    
 
     //struct message msg;  // Local message struct
 
     // Wait here for full group or assign time limit
     printf("\t  PRZEWODNIK %d CZEKA NA GRUPE\n", getpid());
-    while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) || time(NULL)>Tk);
-    sem_wait(&checkoutdata->mutex);
-    printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
-    checkoutdata->group_active[nr]=1;
-    sem_post(&checkoutdata->mutex);
+    time_t current_time=time(NULL);
+    while((checkoutdata->group_counts[nr]+checkoutdata->group_children[nr]<M+1) && current_time<Tk)
+    {
+        sleep(1);
+        current_time=time(NULL);
+    };
+    if(checkoutdata->parkClosed && checkoutdata->group_counts[nr]==1)
+    {
+        printf(ANSI_COLOR_RED "PRZEWODNIK %d KONCZY PRACE\n" ANSI_COLOR_RESET, getpid());
+        tourCleanup(tourdata);
+        checkoutCleanup(checkoutdata);
+        exit(0);
+    }
 }
 
 void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
@@ -485,7 +468,7 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
     printf("Przewodnik %d has received all messages from group %d. Simulating travel to destination...\n", getpid(), mygroup);
 
     // Simulate travel with a delay
-    srand(time(NULL) ^ (getpid()));
+    srand((getpid()));
     sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[mygroup] > 0 ? 1.5 : 1))); 
 
     // Notify the group that they have arrived
@@ -511,7 +494,7 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup) {
 
 void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) 
 {
-    srand(time(NULL) ^ (getpid()));
+    srand((getpid()));
     int mostTime = rand() % 5 + 1; // Domyslny czas przejscia przez most
 
     if (trasa == 1)
@@ -601,7 +584,7 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count)
     }
 
     // Seed the random number generator
-    srand(time(NULL) ^ (getpid()));
+    srand((getpid()));
     int wiezaTime = rand() % 5 + 1;  // Random time between 1 and 5
 
     // Simulate wieza activity
@@ -620,6 +603,7 @@ void wieza(TourData* data, int tourist_id, int group_id, int children_count)
 
 
 // Ferry riding function
+// Ferry riding function
 void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa)
 {
     int ferry_time = PROM;
@@ -635,37 +619,37 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
 
         while (data->promSide != 1)
         {
-            if (data->promWaiting2 > 0)
+            if (data->promWaiting2 > 0 || data->prom==1)
             {
                 // Someone is waiting on the other side, release and keep waiting
                 continue;
             }
             // No one is waiting on the other side, summon the ferry
             
-            sem_wait(&data->promMutex);
+            //sem_wait(&data->promMutex);
             if(data->promSide!=1)
             {
                 data->promSide = 1;
                 printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 1.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-                sleep(ferry_time);
+                //sleep(ferry_time);
             }
-            sem_post(&data->promMutex);
+            //sem_post(&data->promMutex);
             
         }
 
-        while (data->promCounter2 > 0 && data->prom != 0);
+        while (data->promCounter2 > 0 || data->prom != 0);
 
         for (int i = 0; i < children_count + 1; i++)
         {
             data->promCounter1++;
+            data->promWaiting1--;
         }
+
+        while(data->promWaiting1>0 && data->promCounter1<X3);
 
         printf(ANSI_COLOR_GREEN "Turysta %d z grupy %d plynie promem.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
-        if (data->prom == 0)
-        {
-            data->prom = 1;
-        }
+        data->prom = 1;
 
         sleep(ferry_time);
 
@@ -684,7 +668,6 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
         for (int i = 0; i < children_count + 1; i++)
         {
             data->promCounter1--;
-            data->promWaiting1--;
             sem_post(&data->promSpots1);
         }
     }
@@ -698,38 +681,36 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
 
         while (data->promSide != 2)
         {
-            if (data->promWaiting1 > 0)
+            if (data->promWaiting1 > 0 || data->prom==1)
             {
                 // Someone is waiting on the other side, release and keep waiting
                 continue;
             }
 
             // No one is waiting on the other side, summon the ferry
-            printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 2.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-            data->promSide = 2;
-            sem_wait(&data->promMutex);
+            //sem_wait(&data->promMutex);
             if(data->promSide!=2)
             {
-                printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 1.\n" ANSI_COLOR_RESET, tourist_id, group_id);
-                sleep(ferry_time);
+                printf(ANSI_COLOR_YELLOW "Turysta %d z grupy %d wzywa prom na strone 2.\n" ANSI_COLOR_RESET, tourist_id, group_id);
+                //sleep(ferry_time);
                 data->promSide = 2;
             }
-            sem_post(&data->promMutex);
+            break;
+            //sem_post(&data->promMutex);
         }
 
-        while (data->promCounter1 > 0 && data->prom != 0);
+        while (data->promCounter1 > 0 || data->prom != 0);
 
         for (int i = 0; i < children_count + 1; i++)
         {
             data->promCounter2++;
+            data->promWaiting2--;
         }
 
+        while(data->promWaiting2>0 && data->promCounter2<X3);
         printf(ANSI_COLOR_GREEN "Turysta %d z grupy %d plynie promem.\n" ANSI_COLOR_RESET, tourist_id, group_id);
 
-        if (data->prom == 0)
-        {
-            data->prom = 1;
-        }
+        data->prom = 1;
 
         sleep(ferry_time);
 
@@ -748,7 +729,6 @@ void prom(TourData* data, int tourist_id, int group_id, int children_count, int 
         for (int i = 0; i < children_count + 1; i++)
         {
             data->promCounter2--;
-            data->promWaiting2--;
             sem_post(&data->promSpots2);
         }
     }

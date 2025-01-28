@@ -8,7 +8,7 @@ int intLength(int num);
 
 int main()
 {
-
+    CheckoutData* data=checkoutSetupShm();
     for(int i=0;i<K;i++)
     {
         pid_t pid = fork();
@@ -26,7 +26,7 @@ int main()
             } 
         }
     }
-    //sleep(1);
+    sleep(2);
 
 
     int P_length=intLength(P);
@@ -50,10 +50,9 @@ int main()
             } 
         }
     }
-    //sleep(1);
-    time_t current_time = time(NULL); // Starting time
-    time_t Tk = current_time + 50;    // Ending time after 60 seconds
-    for(int i=0;i<40 && current_time<Tk;i++)
+    sleep(2);
+    
+    for(int i=0;i<50;i++)
     {
         pid_t pid = fork();
         if(pid<0)
@@ -63,8 +62,6 @@ int main()
         }
         else if(pid == 0) // child process
         {
-            srand(time(NULL));
-            
             //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
             int age = 0;
             char age_str[4]; // Enough space for "50\0"
@@ -77,8 +74,19 @@ int main()
             
         }
         //sleep(1);
-        current_time=time(NULL); 
     }
+    time_t current_time = time(NULL); // Starting time
+    time_t Tk=current_time+PARK;
+    while(current_time < Tk)
+    {
+        sleep(2);
+        current_time = time(NULL);
+    };
+    sem_wait(&data->mutex);
+    data->parkClosed=1;
+    sem_post(&data->mutex);
+    printf("\t\t\t\t\t\tINIT ROZLACZA SIE\n");
+    checkoutCleanup(data);
 }
 
 

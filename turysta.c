@@ -8,13 +8,13 @@ volatile bool stopThreads = false;
 void *idleThread(void *arg) {
     int *child_id = (int *)arg;
 
-    printf("Child thread %d is idle and waiting for parent to terminate it.\n", *child_id);
+    printf("Dziecko %d zaczyna trase z rodzicem.\n", *child_id);
 
     while (!stopThreads) {
         sleep(1); // Simulate idling (can be adjusted as needed)
     }
 
-    printf("Child thread %d is terminating.\n", *child_id);
+    printf("Dziecko %d konczy swoje dzialanie.\n", *child_id);
     pthread_exit(NULL);
 }
 
@@ -28,22 +28,22 @@ int main(int argc, char *argv[])
     // Parse the VIP flag
     int vip_flag = atoi(argv[1]);
     if (vip_flag != 0 && vip_flag != 1) {
-        printf("ERROR: VIP flag must be 0 (non-VIP) or 1 (VIP).\n");
+        printf("ERROR: VIP = 0 (non-VIP) or 1 (VIP).\n");
         exit(1);
     }
 
     // Parse children ages
     int children_count = argc - 2;
     if (children_count > X1-1) {
-        printf("ERROR: Number of children exceeds the maximum allowed (%d).\n", M);
+        printf("ERROR: Liczba dzieci zby wysoka (%d).\n", X1-1);
         exit(1);
     }
     int below_five=0;
     int children_ages[X1] = {0};  // Array to hold children ages
     for (int i = 0; i < children_count; i++) {
         children_ages[i] = atoi(argv[i + 2]);
-        if (children_ages[i] <= 0) {
-            printf("ERROR: Invalid age for child %d: %s. Must be a positive integer.\n", i + 1, argv[i + 2]);
+        if (children_ages[i] <= 0 || children_ages[i] > 15) {
+            printf("ERROR: zly wiek dla dziecka %d: %s.\n", i + 1, argv[i + 2]);
             exit(1);
         }
         if(children_ages[i]<=5)
@@ -56,12 +56,7 @@ int main(int argc, char *argv[])
     
 
     int mypid=getpid();
-    printf("Tourist PID: %d, VIP: %d, Number of children: %d\n", mypid, vip_flag, children_count);
-
-    printf("\t\t\t\t\t\t\tBELOWFIVE %d\n", below_five);
-    for (int i = 0; i < children_count; i++) {
-        printf("\tChild %d age: %d\n", i + 1, children_ages[i]);
-    }
+    printf("Tourist PID: %d, VIP: %d, Dzieci: %d\n", mypid, vip_flag, children_count);
 
     
     
@@ -77,7 +72,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i < children_count; i++) {
         child_ids[i] = i + 1;
         if (pthread_create(&child_threads[i], NULL, idleThread, &child_ids[i]) != 0) {
-            perror("Failed to create thread");
+            perror("Nie udalo sie utworzyc watku dziecka");
             return 1;
         }
     }
@@ -148,7 +143,7 @@ if(trasa==1)
         exit(1);
     }
 
-    if(below_five>0)
+    if(below_five==0)
     {
         wieza(tourdata, mypid, mygroup, children_count);
     }

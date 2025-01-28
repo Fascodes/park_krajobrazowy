@@ -27,24 +27,29 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_RESET "\x1b[0m"
+
+
 #define N 350
 #define VIP N/20
 #define M 10
-#define P 3
-#define K 10
-#define X1 24 // most
-#define X2 45 // wieza
-#define X3 35 // prom
+#define P 1
+#define K 1
+#define X1 7 // most
+#define X2 15 // wieza
+#define X3 12 // prom
 #define KASA1 1
 #define KASA2 2
-#define PROM 5
+#define PROM 10
 #define PARK 70
 
 // Shared memory structure
 typedef struct {
 
-	int enter_queue[N];  // Queue for entering clients
-    int exit_queue[N];   // Queue for exiting clients
     int enter_head, enter_tail; // Head and tail for entering queue
     int exit_head, exit_tail;   // Head and tail for exiting queue
 
@@ -61,24 +66,21 @@ typedef struct {
 
 	int processedCounter;
 
+	bool parkClosed;
+
 	int connected;
 
     sem_t mutex;     // Protects access to the shared data
     sem_t enter_sem; // Tracks the number of clients in the enter queue
     sem_t exit_sem;  // Tracks the number of clients in the exit queue
     //sem_t group_ready[P]; 
+	sem_t checkoutspace;
 	sem_t working;
 	sem_t cleanupMutex;
 	
 } CheckoutData;
 
 typedef struct {
-
-	int most_queue1[N];
-	int most_queue2[N];
-	int wieza_queue[N];
-	int prom_queue1[N];
-	int prom_queue2[N];
 
 	int connected;
 
@@ -95,6 +97,8 @@ typedef struct {
 	int mostWaiting1;
 	int mostWaiting2;
 	int promSide;
+
+	
 
 	
 	sem_t mostSpots1;
@@ -127,7 +131,7 @@ int checkgroups(int people, CheckoutData* data);
 
 void processClients(CheckoutData* data); // kasjer function
 
-void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk);
+void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* tourdata);
 
 void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa);
 
@@ -140,6 +144,8 @@ void waitingForGroup(CheckoutData* checkoutdata, int mygroup);
 void tourCleanup(TourData* data);
 
 void checkoutCleanup(CheckoutData* data);
+
+
 
 
 // void startTour(); // for przewodnik

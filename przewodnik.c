@@ -16,12 +16,24 @@ int main(int argc, char* argv[])
 
     CheckoutData* checkoutdata=checkoutSetupShm();
     TourData* tourdata=tourSetupShm();
-    time_t Tk=time(NULL)+PARK;
 
 
-    while(time(NULL)<Tk)
+    while(!(checkoutdata->parkClosed))
     {
-        przewodnikWaiting(checkoutdata, nr, (time(NULL)+PARK/3));
+        sem_wait(&checkoutdata->mutex);
+        checkoutdata->group_active[nr]=0;
+        checkoutdata->groups[nr][0]=getpid();
+        checkoutdata->group_counts[nr]=1;
+        sem_post(&checkoutdata->mutex);
+        while(!(checkoutdata->group_counts[nr]>1))
+        {
+            przewodnikWaiting(checkoutdata, nr, (time(NULL)+15), tourdata);
+        };
+        sem_wait(&checkoutdata->mutex);
+        checkoutdata->group_active[nr]=1;
+        sem_post(&checkoutdata->mutex);
+        printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
+        
 
         sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[nr] > 0 ? 1.5 : 1))); 
 
@@ -53,7 +65,6 @@ int main(int argc, char* argv[])
         }
         else if(trasa==2)
         {
-            printf("TUTAJ\n");
             prom(tourdata, getpid(), nr, 0, trasa);
 
             waitingForGroup(checkoutdata, nr);
@@ -67,7 +78,7 @@ int main(int argc, char* argv[])
     }
     
     
-
+    printf(ANSI_COLOR_RED "PRZEWODNIK %d KONCZY PRACE\n" ANSI_COLOR_RESET, getpid());
     checkoutCleanup(checkoutdata);
     tourCleanup(tourdata);
     
