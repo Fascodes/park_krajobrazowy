@@ -4,7 +4,6 @@
 #include <sys/types.h>
 #include <sys/msg.h>
 #include <sys/shm.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <sys/sem.h>
 #include <semaphore.h>
@@ -13,6 +12,8 @@
 #include <signal.h>
 #include <time.h>
 #include <pthread.h>
+#include <stdbool.h>
+
 
 
 // przewodnicy musza czekac az grupa, ktora jest w trakcie zapelniania sie wystartuje wycieczke, zanim zaczna wypelniac swoja grupe
@@ -26,26 +27,35 @@
 // #define WOLNY 3
 // #define ZAJETY 4
 
-#define N 30
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_WHITE "\x1b[37m"
+#define ANSI_COLOR_RESET "\x1b[0m"
+
+
+#define N 50
 #define VIP N/20
 #define M 10
-#define P 1
+#define P 4
 #define K 10
 #define X1 7 // most
 #define X2 15 // wieza
 #define X3 12 // prom
-
+#define KASA1 1
+#define KASA2 2
+#define PROM 10
+#define PARK 70
 
 // Shared memory structure
 typedef struct {
 
-	int enter_queue[N];  // Queue for entering clients
-    int exit_queue[N];   // Queue for exiting clients
-    int enter_head, enter_tail; // Head and tail for entering queue
-    int exit_head, exit_tail;   // Head and tail for exiting queue
 
-	int groups[P][M+1]; // Groups assigned to przewodnik, na pozycji 0 pid przewodnika
+	int groups[P][M+1]; // Groups assigned to przewodnik, [0] przewodnik
     int group_counts[P];      // Count of clients in each group
+	int group_children[P];
     int group_active[P];      // Status of each group (1 = active, 0 = inactive)
 	
 	int initialized;
@@ -54,31 +64,55 @@ typedef struct {
 
 	int msqid;
 
+	int processedCounter;
+
+	bool parkClosed;
+
+	int connected;
+
+	int maxTurysci;
+	int turCounter;
+
+
     sem_t mutex;     // Protects access to the shared data
     sem_t enter_sem; // Tracks the number of clients in the enter queue
     sem_t exit_sem;  // Tracks the number of clients in the exit queue
-    //sem_t group_ready[P]; 
-	sem_t working;
+	sem_t checkoutspace;
+	sem_t cleanupMutex;	
 	
 } CheckoutData;
 
 typedef struct {
 
-	int most_queue1[N];
-	int most_queue2[N];
-	int wieza_queue[N];
-	int prom_queue1[N];
-	int prom_queue2[N];
+	int connected;
 
-	int most_group[X1];
-	int wieza_group[X2];
-	int prom_group[X3];
+	int prom; 
+	int promCounter1;
+	int promCounter2;
+	int promWaiting1;
+	int promWaiting2;
+	int initialized;
+	int msqid;
+	int mostCounter1;
+	int mostCounter2;
+	int mostSide;
+	int mostWaiting1;
+	int mostWaiting2;
+	int promSide;
 
 
-	sem_t mutexMost;
-	sem_t mutexWieza;
-	sem_t mutexProm;
-    sem_t group_ready[P]; // Signal when a specific group is ready
+
+	
+
+	
+	sem_t mostSpots1;
+	sem_t mostSpots2;
+	sem_t wiezaSpots;
+	sem_t promSpots1;
+	sem_t promSpots2;
+	sem_t promMutex;
+	sem_t cleanupMutex;
+
 } TourData;
 
 
@@ -99,22 +133,19 @@ void enterqueue(CheckoutData* data,int qNumber, int tourist);
 
 int checkgroups(int people, CheckoutData* data);
 
-// int whatgroup(int clientID, CheckoutData* data);
+void processClients(CheckoutData* data);
 
-void processClients(CheckoutData* data); // kasjer function
+void przewodnikWaiting(CheckoutData* checkoutdata, int nr, time_t Tk, TourData* tourdata);
 
-void przewodnikWaiting(CheckoutData* checkoutdata, int nr);
+void prom(TourData* data, int tourist_id, int group_id, int children_count, int trasa);
 
-// void waitingforgroup();
+void wieza(TourData* data, int tourist_id, int group_id, int children_count);
 
-// void startTour(); // for przewodnik
+void most(TourData* data, int tourist_id, int trasa, int group_id, int children_count) ;
 
-// void endTour();
+void waitingForGroup(CheckoutData* checkoutdata, int mygroup);
 
-// void nextSpot(); // for przewodnik
+void tourCleanup(TourData* data);
 
-// void wieza();
+void checkoutCleanup(CheckoutData* data);
 
-// void most();
-
-// void prom();
