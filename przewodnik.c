@@ -24,6 +24,7 @@ int main(int argc, char* argv[])
         checkoutdata->group_active[nr]=0;
         checkoutdata->groups[nr][0]=getpid();
         checkoutdata->group_counts[nr]=1;
+        checkoutdata->group_children[nr]=0;
         sem_post(&checkoutdata->mutex);
         while(!(checkoutdata->group_counts[nr]>1))
         {
@@ -32,7 +33,7 @@ int main(int argc, char* argv[])
         sem_wait(&checkoutdata->mutex);
         checkoutdata->group_active[nr]=1;
         sem_post(&checkoutdata->mutex);
-        printf("\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n",getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
+        printf(ANSI_COLOR_WHITE "\t\tPRZEWODNIK %d ZACZYNA TRASE z %d osobami %d dziecmi\n" ANSI_COLOR_RESET,getpid(),checkoutdata->group_counts[nr]-1, checkoutdata->group_children[nr]);
         
 
         sleep((int)((rand() % 5 + 1) * (checkoutdata->group_children[nr] > 0 ? 1.5 : 1))); 

@@ -31,14 +31,16 @@
 #define ANSI_COLOR_GREEN "\x1b[32m"
 #define ANSI_COLOR_YELLOW "\x1b[33m"
 #define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_WHITE "\x1b[37m"
 #define ANSI_COLOR_RESET "\x1b[0m"
 
 
 #define N 350
 #define VIP N/20
 #define M 10
-#define P 1
-#define K 1
+#define P 4
+#define K 10
 #define X1 7 // most
 #define X2 15 // wieza
 #define X3 12 // prom
@@ -69,6 +71,8 @@ typedef struct {
 	bool parkClosed;
 
 	int connected;
+
+	int checkoutcount;
 
     sem_t mutex;     // Protects access to the shared data
     sem_t enter_sem; // Tracks the number of clients in the enter queue

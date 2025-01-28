@@ -14,7 +14,6 @@ void *idleThread(void *arg) {
         sleep(1); // Simulate idling (can be adjusted as needed)
     }
 
-    printf("Dziecko %d konczy swoje dzialanie.\n", *child_id);
     pthread_exit(NULL);
 }
 

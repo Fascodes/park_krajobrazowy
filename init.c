@@ -52,29 +52,29 @@ int main()
     }
     sleep(2);
     
-    for(int i=0;i<50;i++)
-    {
-        pid_t pid = fork();
-        if(pid<0)
-        {
-            perror("FORK ERROR - init\n");
-            exit(1);
-        }
-        else if(pid == 0) // child process
-        {
-            //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
-            int age = 0;
-            char age_str[4]; // Enough space for "50\0"
-            snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
-            if(execl("./turysta", "./turysta", age_str,(char*) NULL)==-1)
-            {
-                perror("EXEC ERROR - turysta\n");
-                exit(1);
-            }
+    // for(int i=0;i<200;i++)
+    // {
+    //     pid_t pid = fork();
+    //     if(pid<0)
+    //     {
+    //         perror("FORK ERROR - init\n");
+    //         exit(1);
+    //     }
+    //     else if(pid == 0) // child process
+    //     {
+    //         //int age = (rand() % 50) + 1; // Generate random age between 1 and 50
+    //         int age = 0;
+    //         char age_str[4]; // Enough space for "50\0"
+    //         snprintf(age_str, sizeof(age_str), "%d", age); // Convert age to string
+    //         if(execl("./turysta", "./turysta", age_str,(char*) NULL)==-1)
+    //         {
+    //             perror("EXEC ERROR - turysta\n");
+    //             exit(1);
+    //         }
             
-        }
-        //sleep(1);
-    }
+    //     }
+    //     sleep(1);
+    // }
     time_t current_time = time(NULL); // Starting time
     time_t Tk=current_time+PARK;
     while(current_time < Tk)
